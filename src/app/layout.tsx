@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/context/AuthContext'
-import TidioChat from '@/app/components/chatbot/TidioChat'  // 👈 Import del chatbot
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -26,10 +25,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
+      <head>
+        {/* 👇 Script de Tidio directamente en el head */}
+        <script 
+          src="//code.tidio.co/ekbj9i9sy5cvzksxz58aqye2tbuhigmy.js" 
+          async 
+        />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           {children}
-          <TidioChat />  {/* 👈 Chatbot de Tidio - Se carga en todas las páginas */}
         </AuthProvider>
       </body>
     </html>
