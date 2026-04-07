@@ -1,12 +1,22 @@
-import './globals.css'
+import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import './globals.css'
 import { AuthProvider } from '@/context/AuthContext'
+import TidioChat from '@/app/components/chatbot/TidioChat'  // 👈 Import del chatbot
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const metadata = {
-  title: 'PrestaLista Pro',
-  description: 'CRM para gestión de préstamos',
+export const metadata: Metadata = {
+  title: 'PrestaLista Pro - CRM Inteligente para Préstamos',
+  description: 'Gestiona tus leads de préstamos, contacta por WhatsApp y automatiza tu negocio financiero.',
+  keywords: 'préstamos, CRM, leads, WhatsApp, finanzas, México',
+  authors: [{ name: 'PrestaLista Pro' }],
+  openGraph: {
+    title: 'PrestaLista Pro - CRM Inteligente para Préstamos',
+    description: 'Gestiona tus leads de préstamos, contacta por WhatsApp y automatiza tu negocio financiero.',
+    type: 'website',
+    locale: 'es_MX',
+  },
 }
 
 export default function RootLayout({
@@ -15,10 +25,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es">
       <body className={inter.className}>
         <AuthProvider>
           {children}
+          <TidioChat />  {/* 👈 Chatbot de Tidio - Se carga en todas las páginas */}
         </AuthProvider>
       </body>
     </html>
