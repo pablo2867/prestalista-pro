@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/context/AuthContext'
+import WhatsAppFloating from '@/app/components/whatsapp/WhatsAppFloating'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,16 +26,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <head>
-        {/* 👇 Script de Tidio directamente en el head */}
-        <script 
-          src="//code.tidio.co/ekbj9i9sy5cvzksxz58aqye2tbuhigmy.js" 
-          async 
-        />
-      </head>
       <body className={inter.className}>
         <AuthProvider>
           {children}
+          <WhatsAppFloating />
         </AuthProvider>
       </body>
     </html>
