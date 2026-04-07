@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { createClient } from '@/utils/supabase/client'
 import { ROLE_PERMISSIONS } from '@/types/roles'
-import { ArrowLeft, Save, XCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, MessageCircle } from 'lucide-react'
 
 interface Lead {
   id: string
@@ -18,112 +18,70 @@ interface Lead {
   creado_en: string
 }
 
-export default function EditLeadPage() {
+export default function LeadsPage() {
   const router = useRouter()
-  const params = useParams()
   const { user, profile, profileLoading } = useAuth()
   const supabase = createClient()
   
-  console.log('🔍 [EditLeadPage] Render - profile:', profile, 'profileLoading:', profileLoading)
-  
-  const [lead, setLead] = useState<Lead | null>(null)
+  const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const userRole = profile?.role || 'viewer'
   const permissions = ROLE_PERMISSIONS[userRole]
-  
-  console.log('🔍 [Permisos] userRole:', userRole, 'permissions:', permissions, 'canEdit:', permissions?.canEdit)
 
-  // 🔧 TEMPORAL: Verificación de permisos con redirect DESACTIVADO
+  // Fetch leads
   useEffect(() => {
-    console.log('🔍 [useEffect permisos] DEBUG MODE')
-    console.log('  profile:', profile)
-    console.log('  profile?.role:', profile?.role)
-    console.log('  permissions.canEdit:', permissions.canEdit)
-    
-    if (profile?.role) {
-      if (!permissions.canEdit) {
-        console.log('❌ Sin permisos (canEdit=false)')
-        console.log('⚠️ Redirect a /unauthorized DESACTIVADO para debugging')
-        // 🚫 REDIRECT COMENTADO TEMPORALMENTE:
-        // router.push('/unauthorized')
-      } else {
-        console.log('✅ Permisos OK, puede editar')
-      }
-    }
-  }, [profile, permissions.canEdit, router])
-
-  useEffect(() => {
-    async function fetchLead() {
-      console.log('🔍 [fetchLead] params.id:', params.id)
-      if (!user || !params.id) return
+    async function fetchLeads() {
+      if (!user) return
 
       try {
         const { data, error } = await supabase
           .from('leads')
           .select('*')
-          .eq('id', params.id)
-          .single()
+          .order('creado_en', { ascending: false })
 
         if (error) throw error
 
-        console.log('✅ Lead cargado:', data)
-        setLead(data)
+        setLeads(data || [])
       } catch (err: any) {
-        console.error('❌ Error fetching lead:', err)
-        setError('No se pudo cargar el lead')
+        console.error('❌ Error fetching leads:', err)
+        setError('No se pudieron cargar los leads')
       }
 
       setLoading(false)
     }
 
-    fetchLead()
-  }, [user, params.id, supabase])
+    fetchLeads()
+  }, [user, supabase])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    if (!lead) return
-    setLead({
-      ...lead,
-      [e.target.name]: e.target.value
-    })
+  // Función para abrir WhatsApp
+  const openWhatsApp = (lead: Lead) => {
+    if (!lead.whatsapp) return
+    
+    const phone = lead.whatsapp.replace(/[\s\-\(\)]/g, '')
+    const message = encodeURIComponent(`Hola ${lead.nombre}, te contacto desde PrestaLista Pro respecto a tu solicitud de préstamo`)
+    const url = `https://wa.me/${phone}?text=${message}`
+    
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!lead) return
-
-    setSaving(true)
-    setError(null)
+  const handleDelete = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este lead?')) return
 
     try {
       const { error } = await supabase
         .from('leads')
-        .update({
-          nombre: lead.nombre,
-          email: lead.email,
-          telefono: lead.telefono,
-          empresa: lead.empresa,
-          estado: lead.estado,
-          whatsapp: lead.whatsapp,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', lead.id)
+        .delete()
+        .eq('id', id)
 
       if (error) throw error
 
-      router.push('/crm?updated=true')
+      setLeads(leads.filter(lead => lead.id !== id))
     } catch (err: any) {
-      console.error('❌ Error updating lead:', err)
-      setError('No se pudo guardar los cambios')
+      console.error('❌ Error deleting lead:', err)
+      alert('No se pudo eliminar el lead')
     }
-
-    setSaving(false)
-  }
-
-  const handleCancel = () => {
-    router.push('/crm')
   }
 
   if (loading || profileLoading) {
@@ -134,157 +92,127 @@ export default function EditLeadPage() {
     )
   }
 
-  if (error && !lead) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Error</h1>
-          <p className="text-gray-600">{error}</p>
+          <p className="text-red-600">{error}</p>
           <button
-            onClick={() => router.push('/crm')}
+            onClick={() => window.location.reload()}
             className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            Volver al Dashboard
+            Reintentar
           </button>
         </div>
       </div>
     )
   }
 
-  if (!lead) return null
-
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <button
-          onClick={handleCancel}
-          className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Volver al Dashboard
-        </button>
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">Leads</h1>
+          <p className="text-gray-600 mt-2">Gestiona tus leads de préstamos</p>
+        </div>
         
-        <h1 className="text-3xl font-bold text-gray-800">Editar Lead</h1>
-        <p className="text-gray-600 mt-2">Modifica la información del lead</p>
+        {permissions.canCreate && (
+          <button
+            onClick={() => router.push('/crm/leads/new')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Lead
+          </button>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-md p-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nombre Completo *
-            </label>
-            <input
-              type="text"
-              name="nombre"
-              value={lead.nombre}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email *
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={lead.email}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Teléfono *
-            </label>
-            <input
-              type="text"
-              name="telefono"
-              value={lead.telefono}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              WhatsApp
-            </label>
-            <input
-              type="text"
-              name="whatsapp"
-              value={lead.whatsapp || ''}
-              onChange={handleChange}
-              placeholder="+52 1 555 555 5555"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Empresa *
-            </label>
-            <input
-              type="text"
-              name="empresa"
-              value={lead.empresa}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Estado *
-            </label>
-            <select
-              name="estado"
-              value={lead.estado}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="nuevo">Nuevo</option>
-              <option value="contactado">Contactado</option>
-              <option value="calificado">Calificado</option>
-              <option value="perdido">Perdido</option>
-            </select>
-          </div>
+      {/* Tabla de Leads */}
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Nombre</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Email</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Teléfono</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Empresa</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Estado</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {leads.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                    No hay leads registrados. ¡Crea el primero!
+                  </td>
+                </tr>
+              ) : (
+                leads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-gray-900">{lead.nombre}</div>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{lead.email}</td>
+                    <td className="px-6 py-4 text-gray-600">{lead.telefono}</td>
+                    <td className="px-6 py-4 text-gray-600">{lead.empresa}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                        lead.estado === 'nuevo' ? 'bg-blue-100 text-blue-700' :
+                        lead.estado === 'contactado' ? 'bg-yellow-100 text-yellow-700' :
+                        lead.estado === 'calificado' ? 'bg-green-100 text-green-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {lead.estado}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {permissions.canEdit && (
+                          <button
+                            onClick={() => router.push(`/crm/leads/${lead.id}/edit`)}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        
+                        {/* 👇 Botón de WhatsApp en la lista */}
+                        {lead.whatsapp && (
+                          <button
+                            onClick={() => openWhatsApp(lead)}
+                            className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                            title="Enviar WhatsApp"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        
+                        {permissions.canDelete && (
+                          <button
+                            onClick={() => handleDelete(lead.id)}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        <div className="flex items-center gap-4 mt-8 pt-6 border-t border-gray-200">
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            {saving ? 'Guardando...' : 'Guardar Cambios'}
-          </button>
-          
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancelar
-          </button>
-        </div>
-      </form>
+      {/* Contador */}
+      <div className="mt-4 text-sm text-gray-500">
+        {leads.length} lead{leads.length !== 1 ? 's' : ''} encontrado{leads.length !== 1 ? 's' : ''}
+      </div>
     </div>
   )
 }
