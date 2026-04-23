@@ -1,145 +1,100 @@
 'use client'
 
-import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useRouter, usePathname } from 'next/navigation'
-import { 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
-  Settings, 
-  LogOut, 
-  Menu, 
-  X,
-  DollarSign,
-  TrendingUp,
-  Calendar,
-  Bell
-} from 'lucide-react'
-import AvatarUploader from './AvatarUploader'
+import Link from 'next/link'
+
+// import LanguageSwitcher from './LanguageSwitcher'  // ← DESACTIVADO TEMPORALMENTE
+
+const navItems = [
+  { href: '/crm/dashboard', label: '📊 Dashboard', icon: '📊' },
+  { href: '/crm/capital', label: '💰 Capital', icon: '💰' },
+  { href: '/crm/prestamos', label: '💳 Préstamos', icon: '💳' },
+  { href: '/crm/distribuidores', label: '👥 Distribuidores', icon: '👥' },
+  { href: '/crm/reportes', label: '📈 Reportes', icon: '📈' },
+  { href: '/crm/ajustes', label: '⚙️ Ajustes', icon: '⚙️' },
+]
 
 export default function Sidebar() {
-  const [isOpen, setIsOpen] = useState(false)
   const { user, signOut } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/crm' },
-    { icon: Users, label: 'Clientes', href: '/crm/clientes' },
-    { icon: FileText, label: 'Préstamos', href: '/crm/prestamos' },
-    { icon: DollarSign, label: 'Pagos', href: '/crm/pagos' },
-    { icon: TrendingUp, label: 'Reportes', href: '/crm/reportes' },
-    { icon: Calendar, label: 'Calendario', href: '/crm/calendario' },
-    { icon: Bell, label: 'Notificaciones', href: '/crm/notificaciones' },
-    { icon: Settings, label: 'Configuración', href: '/crm/configuracion' },
-  ]
-
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     await signOut()
-  }
-
-  const getUserInitials = () => {
-    if (!user) return '?'
-    const name = user.user_metadata?.nombre || user.email?.split('@')[0] || 'U'
-    return name.charAt(0).toUpperCase()
+    router.push('/login')
   }
 
   return (
-    <>
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-md"
-      >
-        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-
-      {/* Overlay */}
-      {isOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}
-      >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <LayoutDashboard className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-800">PrestaLista Pro</h1>
-                <p className="text-xs text-gray-500">CRM de Préstamos</p>
-              </div>
-            </div>
+    <aside className="w-64 bg-[#1a1a25] border-r border-[#2a2a35] flex flex-col min-h-screen fixed left-0 top-0">
+      {/* Logo / Brand */}
+      <div className="p-6 border-b border-[#2a2a35]">
+        <Link href="/crm/dashboard" className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-xl">
+            💰
           </div>
-
-          {/* User Profile */}
-          <div className="p-4 border-b border-gray-200">
-            <div className="flex items-center gap-3">
-              <AvatarUploader size="md" editable={true} />
-              <div className="text-left flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800 truncate">
-                  {user?.user_metadata?.nombre || user?.email?.split('@')[0]}
-                </p>
-                <p className="text-xs text-gray-600 truncate">{user?.email}</p>
-              </div>
-            </div>
+          <div>
+            <h1 className="text-white font-bold text-lg">PrestaLista</h1>
+            <p className="text-gray-400 text-xs">Pro</p>
           </div>
+        </Link>
+      </div>
 
-          {/* Menu Items */}
-          <nav className="flex-1 p-4 overflow-y-auto">
-            <ul className="space-y-2">
-              {menuItems.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href
-                
-                return (
-                  <li key={item.href}>
-                    <button
-                      onClick={() => {
-                        router.push(item.href)
-                        setIsOpen(false)
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                      <span className="text-sm font-medium">{item.label}</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </nav>
-
-          {/* Logout Button */}
-          <div className="p-4 border-t border-gray-200">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                  : 'text-gray-300 hover:bg-[#2a2a35] hover:text-white'
+              }`}
             >
-              <LogOut className="w-5 h-5" />
-              <span className="text-sm font-medium">Cerrar Sesión</span>
-            </button>
+              <span className="text-lg">{item.icon}</span>
+              <span className="font-medium">{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* User Info */}
+      <div className="p-4 border-t border-[#2a2a35]">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+            {user?.email?.charAt(0).toUpperCase() || 'U'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-medium text-sm truncate">
+              {user?.email?.split('@')[0] || 'Usuario'}
+            </p>
+            <p className="text-gray-400 text-xs truncate">
+              {user?.email || 'sin@email.com'}
+            </p>
           </div>
         </div>
-      </aside>
+      </div>
 
-      {/* Main Content Area Spacer */}
-      <div className="lg:ml-64" />
-    </>
+      {/* Language Switcher - DESACTIVADO TEMPORALMENTE */}
+      {/*
+      <div className="px-4 pb-4">
+        <LanguageSwitcher />
+      </div>
+      */}
+
+      {/* Logout Button */}
+      <div className="p-4 border-t border-[#2a2a35]">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl transition-all duration-200"
+        >
+          <span className="text-lg">🔐</span>
+          <span className="font-medium">Cerrar Sesión</span>
+        </button>
+      </div>
+    </aside>
   )
 }

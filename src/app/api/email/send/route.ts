@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import WelcomeEmail from '@/emails/WelcomeEmail'
-import { render } from '@react-email/components'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +12,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // ✅ IMPORTANTE: Instanciar Resend DENTRO de la función (runtime)
+    const resend = new Resend(process.env.RESEND_API_KEY)
 
     let subject = ''
     let react = null
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await resend.emails.send({
-      from: 'PrestaLista Pro <onboarding@resend.dev>',  // ✅ CAMBIO: resend.dev en lugar de prestalista.com
+      from: 'PrestaLista Pro <onboarding@resend.dev>',
       to: [email],
       subject,
       react,

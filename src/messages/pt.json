@@ -1,0 +1,77 @@
+{
+  "Common": {
+    "appName": "PrestaLista Pro",
+    "appSubtitle": "CRM de Empréstimos",
+    "loading": "Carregando...",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "export": "Exportar",
+    "print": "Imprimir",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "actions": "Ações",
+    "back": "Voltar",
+    "next": "Próximo",
+    "previous": "Anterior",
+    "yes": "Sim",
+    "no": "Não",
+    "optional": "opcional"
+  },
+  "Navigation": {
+    "dashboard": "Painel",
+    "capital": "Capital",
+    "myLeads": "Meus Leads",
+    "borrowers": "Mutuários",
+    "distributors": "Distribuidores",
+    "loans": "Empréstimos",
+    "payments": "Pagamentos",
+    "reports": "Relatórios",
+    "settings": "Configurações",
+    "profile": "Meu Perfil",
+    "logout": "Sair"
+  },
+  "Capital": {
+    "title": "Gestão de Capital",
+    "subtitle": "Administre o capital dos distribuidores",
+    "initialCapital": "Capital Inicial",
+    "availableCapital": "Capital Disponível",
+    "capitalInUse": "Capital em Uso",
+    "registerMovement": "Registrar Movimentação",
+    "distributor": "Distribuidor",
+    "generalCapital": "Capital Geral",
+    "type": "Tipo",
+    "amount": "Valor",
+    "notes": "Observações",
+    "history": "Histórico",
+    "noMovements": "Sem movimentações",
+    "initial": "📥 Capital Inicial",
+    "additional": "➕ Capital Adicional",
+    "withdrawal": "➖ Retirada",
+    "adjustment": "⚙️ Ajuste",
+    "balanceAfter": "Saldo após",
+    "register": "💾 Registrar",
+    "saving": "Salvando...",
+    "success": "✅ Capital registrado com sucesso",
+    "error": "❌ Erro: {error}",
+    "exportCSV": "📥 Exportar CSV",
+    "print": "🖨️ Imprimir",
+    "noMovementsToExport": "Sem movimentações para exportar"
+  },
+  "MovementType": {
+    "asignation": "📥 Inicial",
+    "disbursement": "➕ Adicional",
+    "recovery": "➖ Retirada",
+    "adjustment": "⚙️ Ajuste"
+  },
+  "Auth": {
+    "admin": "👑 Admin",
+    "agent": "👤 Agente",
+    "viewer": "👁️ Visualizador"
+  },
+  "Dashboard": {
+    "title": "Painel",
+    "subtitle": "Resumo geral do seu negócio"
+  }
+}

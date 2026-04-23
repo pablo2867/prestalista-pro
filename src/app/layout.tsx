@@ -1,22 +1,11 @@
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import './globals.css'
+// Root Layout con AuthProvider + TenantProvider
 import { AuthProvider } from '@/context/AuthContext'
-import WhatsAppFloating from '@/app/components/whatsapp/WhatsAppFloating'
+import { TenantProvider } from '@/context/TenantContext'
+import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
-
-export const metadata: Metadata = {
-  title: 'PrestaLista Pro - CRM Inteligente para Préstamos',
-  description: 'Gestiona tus leads de préstamos, contacta por WhatsApp y automatiza tu negocio financiero.',
-  keywords: 'préstamos, CRM, leads, WhatsApp, finanzas, México',
-  authors: [{ name: 'PrestaLista Pro' }],
-  openGraph: {
-    title: 'PrestaLista Pro - CRM Inteligente para Préstamos',
-    description: 'Gestiona tus leads de préstamos, contacta por WhatsApp y automatiza tu negocio financiero.',
-    type: 'website',
-    locale: 'es_MX',
-  },
+export const metadata = {
+  title: 'PrestaLista Pro',
+  description: 'Sistema de Gestión de Préstamos',
 }
 
 export default function RootLayout({
@@ -25,11 +14,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es">
-      <body className={inter.className}>
+    <html lang="es" suppressHydrationWarning>
+      <body className="bg-[#0a0a0f] text-white antialiased">
         <AuthProvider>
-          {children}
-          <WhatsAppFloating />
+          <TenantProvider>
+            {children}
+          </TenantProvider>
         </AuthProvider>
       </body>
     </html>

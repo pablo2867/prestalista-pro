@@ -1,0 +1,77 @@
+{
+  "Common": {
+    "appName": "PrestaLista Pro",
+    "appSubtitle": "Loan CRM",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "export": "Export",
+    "print": "Print",
+    "search": "Search",
+    "filter": "Filter",
+    "actions": "Actions",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "yes": "Yes",
+    "no": "No",
+    "optional": "optional"
+  },
+  "Navigation": {
+    "dashboard": "Dashboard",
+    "capital": "Capital",
+    "myLeads": "My Leads",
+    "borrowers": "Borrowers",
+    "distributors": "Distributors",
+    "loans": "Loans",
+    "payments": "Payments",
+    "reports": "Reports",
+    "settings": "Settings",
+    "profile": "My Profile",
+    "logout": "Logout"
+  },
+  "Capital": {
+    "title": "Capital Management",
+    "subtitle": "Manage distributor capital",
+    "initialCapital": "Initial Capital",
+    "availableCapital": "Available Capital",
+    "capitalInUse": "Capital in Use",
+    "registerMovement": "Register Movement",
+    "distributor": "Distributor",
+    "generalCapital": "General Capital",
+    "type": "Type",
+    "amount": "Amount",
+    "notes": "Notes",
+    "history": "History",
+    "noMovements": "No movements",
+    "initial": "📥 Initial Capital",
+    "additional": "➕ Additional Capital",
+    "withdrawal": "➖ Withdrawal",
+    "adjustment": "⚙️ Adjustment",
+    "balanceAfter": "Balance after",
+    "register": "💾 Register",
+    "saving": "Saving...",
+    "success": "✅ Capital registered successfully",
+    "error": "❌ Error: {error}",
+    "exportCSV": "📥 Export CSV",
+    "print": "🖨️ Print",
+    "noMovementsToExport": "No movements to export"
+  },
+  "MovementType": {
+    "asignation": "📥 Initial",
+    "disbursement": "➕ Additional",
+    "recovery": "➖ Withdrawal",
+    "adjustment": "⚙️ Adjustment"
+  },
+  "Auth": {
+    "admin": "👑 Admin",
+    "agent": "👤 Agent",
+    "viewer": "👁️ Viewer"
+  },
+  "Dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Business overview"
+  }
+}
