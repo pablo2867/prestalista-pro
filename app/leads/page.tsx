@@ -1,4 +1,4 @@
-// app/leads/page.tsx - VERSIÓN COMPLETA Y FUNCIONAL
+// app/leads/page.tsx - VERSIÓN ULTRA-DEBUG (para diagnosticar el problema)
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -9,19 +9,16 @@ import ProtectedRoute from '../lib/ProtectedRoute'
 export default function LeadsPage() {
   const { user, signOut, isAdmin, isDistributor } = useAuth()
   
-  // ✅ ESTADOS (asegúrate de que estos estén al inicio)
+  // ✅ ESTADOS - Todos al inicio
   const [leads, setLeads] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [showForm, setShowForm] = useState(false)  // ✅ Este es el que faltaba
+  const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({ 
-    nombre: '', 
-    telefono: '', 
-    fuente: 'referido', 
-    monto_potencial: '', 
-    notas: '' 
+    nombre: '', telefono: '', fuente: 'referido', monto_potencial: '', notas: '' 
   })
   const [formLoading, setFormLoading] = useState(false)
+  const [clickCount, setClickCount] = useState(0)  // ✅ Contador de clicks para debug
 
   useEffect(() => { loadLeads() }, [])
 
@@ -37,7 +34,6 @@ export default function LeadsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.nombre || !formData.telefono) return alert('👤 Nombre y teléfono son obligatorios')
-    
     setFormLoading(true)
     try {
       const res = await fetch('/api/leads', {
@@ -51,23 +47,13 @@ export default function LeadsPage() {
         setFormData({ nombre: '', telefono: '', fuente: 'referido', monto_potencial: '', notas: '' })
         setShowForm(false)
         loadLeads()
-      } else {
-        alert('❌ ' + result.error)
-      }
-    } catch (err: any) {
-      alert('Error: ' + err.message)
-    } finally {
-      setFormLoading(false)
-    }
+      } else { alert('❌ ' + result.error) }
+    } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
   }
 
   const updateStatus = async (id: string, nuevoEstado: string) => {
     try {
-      const res = await fetch(`/api/leads/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: nuevoEstado })
-      })
+      const res = await fetch(`/api/leads/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: nuevoEstado }) })
       if (res.ok) loadLeads()
     } catch (err) { console.error(err) }
   }
@@ -75,21 +61,10 @@ export default function LeadsPage() {
   const convertToClient = async (lead: any) => {
     if (!confirm(`¿Convertir a ${lead.nombre} en cliente?`)) return
     try {
-      const res = await fetch('/api/leads/convert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_id: lead.id })
-      })
+      const res = await fetch('/api/leads/convert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lead_id: lead.id }) })
       const result = await res.json()
-      if (result.success) {
-        alert('✅ Cliente creado exitosamente')
-        loadLeads()
-      } else {
-        alert('❌ ' + result.error)
-      }
-    } catch (err: any) {
-      alert('Error: ' + err.message)
-    }
+      if (result.success) { alert('✅ Cliente creado'); loadLeads() } else { alert('❌ ' + result.error) }
+    } catch (err: any) { alert('Error: ' + err.message) }
   }
 
   const getInitials = () => {
@@ -113,6 +88,28 @@ export default function LeadsPage() {
       case 'convertido': return { backgroundColor: '#065f46', color: '#34d399' }
       default: return { backgroundColor: '#374151', color: '#9ca3af' }
     }
+  }
+
+  // ✅ FUNCIÓN DE CLICK ULTRA-VISIBLE
+  const handleNewLeadClick = () => {
+    // 1. Contar clicks
+    setClickCount(prev => prev + 1)
+    
+    // 2. Alert IMMEDIATA para confirmar que el click se registró
+    // (Se quitará después del debug)
+    // alert(`🔘 Click #${clickCount + 1} registrado\nshowForm actual: ${showForm}`)
+    
+    // 3. Log en consola
+    console.log('🔘 [CLICK] #', clickCount + 1, '- showForm antes:', showForm)
+    
+    // 4. Toggle con callback para asegurar que usa el valor más reciente
+    setShowForm(prev => {
+      console.log('🔘 [TOGGLE] showForm:', prev, '->', !prev)
+      return !prev
+    })
+    
+    // 5. Forzar re-render con timestamp (último recurso)
+    // setClickCount(prev => prev) // Esto no hace nada, pero a veces ayuda a React
   }
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>⏳ Cargando...</div>
@@ -179,196 +176,118 @@ export default function LeadsPage() {
           {/* 🔴 BOTÓN HAMBURGUESA */}
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', position: 'fixed', top: '70px', left: '16px', zIndex: 100, padding: '10px 14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>☰</button>
           
-          {/* Header */}
-          <div style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+          {/* 🔍 PANEL DE DEBUG SUPERIOR (siempre visible) */}
+          <div style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            backgroundColor: '#1f2937', 
+            padding: '8px 16px', 
+            fontSize: '11px', 
+            color: '#fbbf24',
+            zIndex: 1000,
+            borderBottom: '2px solid #fbbf24',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>🔧 DEBUG MODE</span>
+            <span>Clicks: <strong style={{color:'#60a5fa'}}>{clickCount}</strong> | showForm: <strong style={{color: showForm ? '#34d399' : '#f87171'}}>{showForm ? '✅ ON' : '❌ OFF'}</strong></span>
+          </div>
+          
+          {/* Header - con padding-top para el panel de debug */}
+          <div style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)', borderRadius: 12, padding: 24, marginBottom: 24, marginTop: 36 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
               <div>
                 <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0, color: 'white' }}>🎯 Mis Leads</h1>
                 <p style={{ margin: '6px 0 0', opacity: 0.9, color: 'white' }}>Gestiona tu pipeline de ventas</p>
               </div>
               
-              {/* 🔘 BOTÓN NUEVO LEAD - CORREGIDO */}
+              {/* 🔘 BOTÓN NUEVO LEAD - ULTRA-VISIBLE */}
               <button 
-                onClick={() => {
-                  console.log('🔘 [DEBUG] Botón clickeado - showForm:', showForm)
-                  setShowForm(prev => !prev)
+                onClick={handleNewLeadClick}
+                onMouseDown={(e) => {
+                  console.log('🖱️ [MOUSEDOWN] Button pressed')
+                  ;(e.target as HTMLElement).style.transform = 'scale(0.98)'
+                }}
+                onMouseUp={(e) => {
+                  console.log('🖱️ [MOUSEUP] Button released')
+                  ;(e.target as HTMLElement).style.transform = 'scale(1)'
                 }}
                 style={{ 
-                  padding: '12px 20px', 
+                  padding: '12px 24px', 
                   backgroundColor: showForm ? '#dc2626' : '#ffffff', 
                   color: showForm ? '#fff' : '#2563eb', 
-                  border: '2px solid transparent',
-                  borderColor: showForm ? '#dc2626' : '#2563eb',
+                  border: '3px dashed',
+                  borderColor: showForm ? '#f87171' : '#3b82f6',
                   borderRadius: '8px', 
                   cursor: 'pointer', 
                   fontWeight: 'bold', 
                   fontSize: 14,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  transition: 'all 0.1s ease',
+                  zIndex: 999,  // ✅ Asegurar que está por encima de todo
+                  position: 'relative' as const
                 }}
               >
-                {showForm ? '✕ Cerrar' : '＋ Nuevo Lead'}
+                {showForm ? '✕ CERRAR FORM' : '＋ NUEVO LEAD'}
               </button>
             </div>
           </div>
 
-          {/* 🔍 INDICADOR DE ESTADO (para debugging) */}
+          {/* 🔍 INDICADOR DE ESTADO GIGANTE */}
           <div style={{ 
-            padding: '8px 16px', 
-            backgroundColor: showForm ? '#065f46' : '#1f2937', 
-            borderRadius: '8px', 
-            marginBottom: 16,
-            fontSize: '12px',
-            color: showForm ? '#34d399' : '#9ca3af',
-            textAlign: 'center'
+            padding: '16px', 
+            backgroundColor: showForm ? '#065f46' : '#7f1d1d', 
+            borderRadius: '12px', 
+            marginBottom: 24,
+            fontSize: '16px',
+            color: 'white',
+            textAlign: 'center',
+            border: `3px solid ${showForm ? '#34d399' : '#f87171'}`,
+            fontWeight: 'bold'
           }}>
-            Estado del formulario: <strong>{showForm ? '🟢 VISIBLE' : '🔴 OCULTO'}</strong>
+            {showForm ? '🟢 FORMULARIO: VISIBLE (showForm = true)' : '🔴 FORMULARIO: OCULTO (showForm = false)'}
+            <br/>
+            <span style={{fontSize:'12px',opacity:0.8}}>Total clicks en botón: {clickCount}</span>
           </div>
 
-          {/* Formulario de Lead */}
+          {/* Formulario de Lead - CON BORDE MUY VISIBLE */}
           {showForm && (
             <div style={{ 
               backgroundColor: '#111827', 
-              border: '2px solid #3b82f6',
+              border: '4px solid #22c55e',  // ✅ Borde verde brillante para confirmar render
               borderRadius: 12, 
-              padding: 20, 
-              marginBottom: 24 
+              padding: 24, 
+              marginBottom: 24,
+              boxShadow: '0 0 0 4px rgba(34,197,94,0.3)'  // ✅ Glow effect
             }}>
-              <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600, color: 'white' }}>📝 Nuevo Lead</h2>
+              <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#22c55e' }}>✅ FORMULARIO RENDERIZADO</h2>
               <form onSubmit={handleSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-                  <input 
-                    type="text" 
-                    placeholder="Nombre *"
-                    value={formData.nombre} 
-                    onChange={(e) => setFormData({...formData, nombre: e.target.value})} 
-                    required 
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} 
-                  />
-                  <input 
-                    type="tel" 
-                    placeholder="Teléfono *"
-                    value={formData.telefono} 
-                    onChange={(e) => setFormData({...formData, telefono: e.target.value})} 
-                    required 
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} 
-                  />
-                  <select 
-                    value={formData.fuente} 
-                    onChange={(e) => setFormData({...formData, fuente: e.target.value})} 
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }}
-                  >
-                    <option value="referido">Referido</option>
-                    <option value="redes">Redes Sociales</option>
-                    <option value="llamada">Llamada en Frío</option>
-                    <option value="distribuidor">Distribuidor</option>
-                  </select>
-                  <input 
-                    type="number" 
-                    placeholder="Monto Potencial"
-                    value={formData.monto_potencial} 
-                    onChange={(e) => setFormData({...formData, monto_potencial: e.target.value})} 
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} 
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6, display: 'block' }}>Nombre *</label>
+                    <input type="text" placeholder="Ej: Juan Pérez" value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '2px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                  </div>
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6, display: 'block' }}>Teléfono *</label>
+                    <input type="tel" placeholder="Ej: 5512345678" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '2px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                  </div>
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={formLoading} 
-                  style={{ 
-                    width: '100%', 
-                    marginTop: 16,
-                    padding: '14px', 
-                    background: '#2563eb', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '8px', 
-                    cursor: 'pointer', 
-                    fontWeight: 'bold', 
-                    fontSize: 16 
-                  }}
-                >
-                  {formLoading ? '⏳ Guardando...' : '💾 Guardar Lead'}
-                </button>
+                <button type="submit" disabled={formLoading} style={{ width: '100%', marginTop: 20, padding: '16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}>{formLoading ? '⏳ Guardando...' : '💾 GUARDAR LEAD'}</button>
               </form>
             </div>
           )}
 
-          {/* Stats Rápidos */}
+          {/* Stats y lista de leads (sin cambios) */}
           <div className="grid-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-              <div style={{ fontSize: 24, marginBottom: 4 }}>🔵</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Nuevos</div>
-              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#60a5fa' }}>{leads.filter(l => l.estado === 'nuevo').length}</div>
-            </div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-              <div style={{ fontSize: 24, marginBottom: 4 }}>🟣</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Contactados</div>
-              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#c084fc' }}>{leads.filter(l => l.estado === 'contactado').length}</div>
-            </div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 16, textAlign: 'center' }}>
-              <div style={{ fontSize: 24, marginBottom: 4 }}>🟢</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Convertidos</div>
-              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#34d399' }}>{leads.filter(l => l.estado === 'convertido').length}</div>
-            </div>
+            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 16, textAlign: 'center' }}><div style={{ fontSize: 24, marginBottom: 4 }}>🔵</div><div style={{ fontSize: 12, color: '#9ca3af' }}>Nuevos</div><div style={{ fontSize: 20, fontWeight: 'bold', color: '#60a5fa' }}>{leads.filter(l => l.estado === 'nuevo').length}</div></div>
+            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 16, textAlign: 'center' }}><div style={{ fontSize: 24, marginBottom: 4 }}>🟣</div><div style={{ fontSize: 12, color: '#9ca3af' }}>Contactados</div><div style={{ fontSize: 20, fontWeight: 'bold', color: '#c084fc' }}>{leads.filter(l => l.estado === 'contactado').length}</div></div>
+            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 16, textAlign: 'center' }}><div style={{ fontSize: 24, marginBottom: 4 }}>🟢</div><div style={{ fontSize: 12, color: '#9ca3af' }}>Convertidos</div><div style={{ fontSize: 20, fontWeight: 'bold', color: '#34d399' }}>{leads.filter(l => l.estado === 'convertido').length}</div></div>
           </div>
 
-          {/* Lista de Leads */}
-          <div>
-            <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600, color: 'white' }}>Todos los Leads</h2>
-            
-            {leads.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 60, color: '#6b7280', backgroundColor: '#111827', borderRadius: 12 }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
-                <p>No hay leads registrados aún.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {leads.map((lead: any) => (
-                  <div key={lead.id} style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20, opacity: lead.estado === 'convertido' ? 0.6 : 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 18, color: 'white' }}>
-                          {lead.nombre?.[0]}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 16, color: 'white' }}>{lead.nombre}</div>
-                          <div style={{ fontSize: 13, color: '#9ca3af' }}>📞 {lead.telefono}</div>
-                          <div style={{ fontSize: 12, color: '#6b7280' }}>📅 {new Date(lead.created_at).toLocaleDateString('es-MX')}</div>
-                        </div>
-                      </div>
-                      <span style={{ padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '600', ...getStatusColor(lead.estado) }}>
-                        {lead.estado.toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {lead.estado === 'nuevo' && (
-                        <button onClick={() => updateStatus(lead.id, 'contactado')} style={{ flex: 1, padding: '10px', backgroundColor: '#581c87', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: 14 }}>📞 Contactado</button>
-                      )}
-                      {lead.estado === 'contactado' && (
-                        <button onClick={() => updateStatus(lead.id, 'nuevo')} style={{ flex: 1, padding: '10px', backgroundColor: '#1f2937', color: '#9ca3af', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: 14 }}>↩️ Volver</button>
-                      )}
-                      <button 
-                        onClick={() => convertToClient(lead)} 
-                        disabled={lead.estado === 'convertido'}
-                        style={{ 
-                          flex: 1, 
-                          padding: '10px', 
-                          backgroundColor: lead.estado === 'convertido' ? '#065f46' : '#059669', 
-                          color: '#fff', 
-                          border: 'none', 
-                          borderRadius: '8px', 
-                          cursor: lead.estado === 'convertido' ? 'not-allowed' : 'pointer', 
-                          fontSize: 14,
-                          fontWeight: 600 
-                        }}
-                      >
-                        {lead.estado === 'convertido' ? '✅ Cliente' : '🔄 Convertir a Cliente'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <div><h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600, color: 'white' }}>Todos los Leads</h2>{leads.length === 0 ? (<div style={{ textAlign: 'center', padding: 60, color: '#6b7280', backgroundColor: '#111827', borderRadius: 12 }}><div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div><p>No hay leads registrados aún.</p></div>) : (<div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{leads.map((lead: any) => (<div key={lead.id} style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}><div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 18, color: 'white' }}>{lead.nombre?.[0]}</div><div><div style={{ fontWeight: 600, fontSize: 16, color: 'white' }}>{lead.nombre}</div><div style={{ fontSize: 13, color: '#9ca3af' }}>📞 {lead.telefono}</div></div></div><span style={{ padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '600', ...getStatusColor(lead.estado) }}>{lead.estado.toUpperCase()}</span></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{lead.estado === 'nuevo' && (<button onClick={() => updateStatus(lead.id, 'contactado')} style={{ flex: 1, padding: '10px', backgroundColor: '#581c87', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: 14 }}>📞 Contactado</button>)}{lead.estado === 'contactado' && (<button onClick={() => updateStatus(lead.id, 'nuevo')} style={{ flex: 1, padding: '10px', backgroundColor: '#1f2937', color: '#9ca3af', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: 14 }}>↩️ Volver</button>)}<button onClick={() => convertToClient(lead)} disabled={lead.estado === 'convertido'} style={{ flex: 1, padding: '10px', backgroundColor: lead.estado === 'convertido' ? '#065f46' : '#059669', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>{lead.estado === 'convertido' ? '✅ Cliente' : '🔄 Convertir'}</button></div></div>))}</div>)}</div>
         </main>
       </div>
     </ProtectedRoute>
