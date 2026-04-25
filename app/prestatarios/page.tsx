@@ -1,23 +1,29 @@
-// app/prestatarios/page.tsx - VERSIÓN MÓVIL OPTIMIZADA
+// app/prestatarios/page.tsx - VERSIÓN CORREGIDA PARA VERCEL
 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../lib/AuthContext'
 import ProtectedRoute from '../lib/ProtectedRoute'
-import { useSearchParams } from 'next/navigation'
 
 export default function PrestatariosPage() {
   const { user, signOut, isAdmin, isDistributor, isCollector } = useAuth()
-  const searchParams = useSearchParams()
   const [prestatarios, setPrestatarios] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [formData, setFormData] = useState({ nombre: '', apellido: '', telefono: '', email: '', direccion: '' })
   const [formLoading, setFormLoading] = useState(false)
+  
+  // 🔐 Estado para "Mis Clientes" - usando useState en lugar de useSearchParams
+  const [esMisClientes, setEsMisClientes] = useState(false)
 
-  // 🔐 Verificar si es vista "Mis Clientes"
-  const esMisClientes = searchParams.get('mis-clientes') === 'true'
+  // Detectar si es vista "Mis Clientes" al montar el componente
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      setEsMisClientes(urlParams.get('mis-clientes') === 'true')
+    }
+  }, [])
 
   useEffect(() => { loadPrestatarios() }, [esMisClientes, user?.id])
 
@@ -43,7 +49,6 @@ export default function PrestatariosPage() {
     if (!formData.nombre || !formData.apellido) return alert('👤 Nombre y apellido obligatorios')
     setFormLoading(true)
     try {
-      // 🔐 Solo admin puede crear clientes globales
       const body: any = { ...formData }
       if (!isAdmin() && user?.id) {
         if (isDistributor()) body.distribuidor_id = user.id
@@ -146,7 +151,7 @@ export default function PrestatariosPage() {
             </p>
           </div>
 
-          {/* Formulario de Registro (Solo Admin o si no es "Mis Clientes") */}
+          {/* Formulario de Registro */}
           {(isAdmin() || !esMisClientes) && (
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
               <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 600 }}>📝 {isAdmin() ? 'Nuevo Cliente' : 'Registrar Cliente'}</h2>
@@ -165,7 +170,7 @@ export default function PrestatariosPage() {
             </div>
           )}
 
-          {/* Lista de Clientes (Cards para móvil) */}
+          {/* Lista de Clientes */}
           <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24 }}>
             <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>
               {esMisClientes ? 'Mis Clientes' : 'Clientes Registrados'} ({prestatarios.length})
