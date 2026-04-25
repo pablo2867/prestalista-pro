@@ -1,4 +1,4 @@
-// app/components/SearchBar.tsx
+// app/components/SearchBar.tsx - VERSIÓN DEBUG
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -7,80 +7,93 @@ import { useRouter } from 'next/navigation'
 export default function SearchBar() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<any>(null)
-  const [showResults, setShowResults] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const searchRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  console.log('🔍 [SearchBar] Render:', { query, results, showDropdown })
 
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (query.length >= 2) {
+        console.log('🔍 [SearchBar] Buscando:', query)
         setLoading(true)
+        setShowDropdown(true)
         try {
-          const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+          // 🔹 Usar URL absoluta con el puerto actual para evitar errores
+          const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+          const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`
+          const url = `${baseUrl}/api/search?q=${encodeURIComponent(query)}`
+          
+          console.log('🌐 [SearchBar] Fetch URL:', url)
+          
+          const res = await fetch(url)
+          console.log('📡 [SearchBar] Response status:', res.status)
+          
           const data = await res.json()
+          console.log('📦 [SearchBar] Response data:', data)
+          
           if (data.success) {
             setResults(data.results)
-            setShowResults(true)
+            console.log('✅ [SearchBar] Resultados guardados:', data.results)
+          } else {
+            console.error('❌ [SearchBar] API error:', data.error)
           }
-        } catch (err) {
-          console.error('Search error:', err)
+        } catch (err: any) {
+          console.error('❌ [SearchBar] Fetch error:', err)
+          setResults({ error: err.message })
         } finally {
           setLoading(false)
         }
       } else {
-        setShowResults(false)
+        setShowDropdown(false)
         setResults(null)
       }
-    }, 300) // Debounce de 300ms
+    }, 300)
 
     return () => clearTimeout(timer)
   }, [query])
 
-  // Cerrar resultados al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowResults(false)
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleResultClick = (type: string, item: any) => {
-    setShowResults(false)
+  const handleResultClick = (type: string) => {
+    console.log('🖱️ [SearchBar] Click en:', type)
+    setShowDropdown(false)
     setQuery('')
     
-    // Redirigir según el tipo de resultado
-    switch (type) {
-      case 'prestamos':
-        router.push(`/prestamos`)
-        break
-      case 'prestatarios':
-        router.push(`/prestatarios`)
-        break
-      case 'leads':
-        router.push(`/leads`)
-        break
-      case 'pagos':
-        router.push(`/movimientos`)
-        break
+    const routes: Record<string, string> = {
+      prestamos: '/prestamos',
+      prestatarios: '/prestatarios', 
+      leads: '/leads',
+      pagos: '/movimientos'
+    }
+    
+    if (routes[type]) {
+      router.push(routes[type])
     }
   }
 
+  // 🎨 Estilos mínimos y visibles
   const s = {
-    container: { position: 'relative' as const, width: '100%', maxWidth: '400px' },
+    container: { position: 'relative' as const, width: '100%', maxWidth: '400px', zIndex: 9999 },
     input: {
       width: '100%',
-      padding: '10px 16px',
-      backgroundColor: 'rgba(255,255,255,0.1)',
-      border: '1px solid rgba(255,255,255,0.2)',
+      padding: '12px 16px',
+      backgroundColor: '#1f2937',
+      border: '2px solid #3b82f6',
       borderRadius: '8px',
       color: 'white',
       fontSize: '14px',
-      outline: 'none',
-      transition: 'all 0.2s'
+      outline: 'none'
     },
     dropdown: {
       position: 'absolute' as const,
@@ -89,151 +102,114 @@ export default function SearchBar() {
       right: 0,
       marginTop: '8px',
       backgroundColor: '#111827',
-      border: '1px solid #1f2937',
+      border: '2px solid #3b82f6',
       borderRadius: '12px',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-      zIndex: 1000,
-      maxHeight: '400px',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+      zIndex: 10000,
+      maxHeight: '500px',
       overflow: 'auto'
     },
-    section: { padding: '12px' },
-    sectionTitle: { fontSize: '11px', color: '#6b7280', textTransform: 'uppercase' as const, fontWeight: '600', marginBottom: '8px', paddingLeft: '8px' },
     item: {
-      padding: '10px 12px',
+      padding: '12px 16px',
       backgroundColor: 'transparent',
-      borderRadius: '6px',
+      borderBottom: '1px solid #1f2937',
       cursor: 'pointer',
-      marginBottom: '4px',
-      transition: 'background-color 0.2s',
       display: 'flex',
       alignItems: 'center',
-      gap: '12px'
-    },
-    itemHover: { backgroundColor: '#1f2937' }
+      gap: '12px',
+      color: 'white'
+    }
   }
 
-  if (!results) return null
-
   return (
-    <div ref={searchRef} style={s.container}>
+    <div ref={containerRef} style={s.container}>
+      {/* 🔍 Input SIEMPRE visible con borde azul para confirmar que está activo */}
       <input
         type="text"
-        placeholder="🔍 Buscar cliente, préstamo, pago..."
+        placeholder="🔍 Buscar..."
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => query.length >= 2 && setShowResults(true)}
+        onChange={(e) => {
+          console.log('⌨️ [SearchBar] Input change:', e.target.value)
+          setQuery(e.target.value)
+        }}
+        onFocus={() => {
+          console.log('🎯 [SearchBar] Input focus')
+          if (query.length >= 2) setShowDropdown(true)
+        }}
         style={s.input}
       />
 
-      {showResults && results && (
+      {/* 📋 Dropdown con resultados */}
+      {showDropdown && query.length >= 2 && (
         <div style={s.dropdown}>
-          {loading && (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af' }}>
-              ⏳ Buscando...
-            </div>
-          )}
-
-          {!loading && (
+          {loading && <div style={{ padding: '16px', color: '#9ca3af' }}>⏳ Buscando...</div>}
+          
+          {!loading && results && (
             <>
-              {results.prestamos.length > 0 && (
-                <div>
-                  <div style={s.sectionTitle}>📄 Préstamos ({results.prestamos.length})</div>
-                  {results.prestamos.map((p: any) => (
-                    <div
-                      key={p.id}
-                      style={s.item}
-                      onClick={() => handleResultClick('prestamos', p)}
-                      onMouseEnter={(e) => Object.assign(e.currentTarget.style, s.itemHover)}
-                      onMouseLeave={(e) => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-                    >
-                      <span>📄</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>
-                          {p.prestatario?.nombre} {p.prestatario?.apellido}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-                          ${Number(p.monto_principal).toLocaleString()} • {p.estado}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {results.prestatarios.length > 0 && (
-                <div>
-                  <div style={s.sectionTitle}>👤 Clientes ({results.prestatarios.length})</div>
+              {/* 👤 Clientes */}
+              {results.prestatarios?.length > 0 && (
+                <>
+                  <div style={{ padding: '8px 16px', fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+                    CLIENTES ({results.prestatarios.length})
+                  </div>
                   {results.prestatarios.map((p: any) => (
                     <div
                       key={p.id}
                       style={s.item}
-                      onClick={() => handleResultClick('prestatarios', p)}
-                      onMouseEnter={(e) => Object.assign(e.currentTarget.style, s.itemHover)}
-                      onMouseLeave={(e) => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
+                      onClick={() => {
+                        console.log('✅ [SearchBar] Seleccionado cliente:', p.nombre)
+                        handleResultClick('prestatarios')
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
                       <span>👤</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{p.nombre} {p.apellido}</div>
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{p.telefono}</div>
+                      <div>
+                        <div style={{ fontWeight: '600' }}>{p.nombre} {p.apellido}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{p.telefono || 'Sin teléfono'}</div>
                       </div>
                     </div>
                   ))}
-                </div>
+                </>
               )}
 
-              {results.leads.length > 0 && (
-                <div>
-                  <div style={s.sectionTitle}>🎯 Leads ({results.leads.length})</div>
-                  {results.leads.map((l: any) => (
-                    <div
-                      key={l.id}
-                      style={s.item}
-                      onClick={() => handleResultClick('leads', l)}
-                      onMouseEnter={(e) => Object.assign(e.currentTarget.style, s.itemHover)}
-                      onMouseLeave={(e) => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
-                    >
-                      <span>🎯</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{l.nombre} {l.apellido}</div>
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{l.origen} • {l.estado}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {results.pagos.length > 0 && (
-                <div>
-                  <div style={s.sectionTitle}>💵 Pagos ({results.pagos.length})</div>
-                  {results.pagos.map((p: any) => (
+              {/* 📄 Préstamos */}
+              {results.prestamos?.length > 0 && (
+                <>
+                  <div style={{ padding: '8px 16px', fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+                    PRÉSTAMOS ({results.prestamos.length})
+                  </div>
+                  {results.prestamos.map((p: any) => (
                     <div
                       key={p.id}
                       style={s.item}
-                      onClick={() => handleResultClick('pagos', p)}
-                      onMouseEnter={(e) => Object.assign(e.currentTarget.style, s.itemHover)}
-                      onMouseLeave={(e) => Object.assign(e.currentTarget.style, { backgroundColor: 'transparent' })}
+                      onClick={() => handleResultClick('prestamos')}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
-                      <span>💵</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: '600', fontSize: '14px', color: '#34d399' }}>
-                          +${Number(p.monto).toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-                          {new Date(p.fecha_pago).toLocaleDateString('es-MX')} • {p.prestamo?.prestatario?.nombre}
-                        </div>
+                      <span>📄</span>
+                      <div>
+                        <div style={{ fontWeight: '600' }}>{p.prestatario?.nombre} {p.prestatario?.apellido}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>${Number(p.monto_principal || 0).toLocaleString()}</div>
                       </div>
                     </div>
                   ))}
-                </div>
+                </>
               )}
 
-              {results.prestamos.length === 0 && results.prestatarios.length === 0 && 
-               results.leads.length === 0 && results.pagos.length === 0 && (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280' }}>
-                  📋 No se encontraron resultados
+              {/* ❌ Sin resultados */}
+              {(!results.prestatarios?.length && !results.prestamos?.length && !results.leads?.length && !results.pagos?.length) && (
+                <div style={{ padding: '16px', color: '#6b7280', textAlign: 'center' }}>
+                  📋 No se encontraron resultados para "{query}"
                 </div>
               )}
             </>
+          )}
+          
+          {!loading && !results && (
+            <div style={{ padding: '16px', color: '#6b7280', textAlign: 'center' }}>
+              Escribe para buscar...
+            </div>
           )}
         </div>
       )}

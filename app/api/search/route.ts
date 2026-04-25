@@ -2,78 +2,127 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// 🔑 Crear cliente solo si existen las claves
+const supabase = (supabaseUrl && supabaseKey) 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get('q')?.toLowerCase().trim()
-
-    if (!query || query.length < 2) {
-      return NextResponse.json({ success: true, results: { prestamos: [], prestatarios: [], leads: [], pagos: [] } })
+    if (!supabase) {
+      return NextResponse.json({ success: false, error: 'Supabase no configurado' }, { status: 500 })
     }
 
-    // 🔍 Buscar en Préstamos (por ID o monto)
-    const {  prestamos } = await supabase
-      .from('prestamos')
-      .select(`
-        id,
-        monto_principal,
-        monto_total,
-        saldo_pendiente,
-        estado,
-        created_at,
-        prestatario:prestatarios (
-          nombre,
-          apellido
-        )
-      `)
-      .or(`monto_principal.ilike.%${query}%,id.ilike.%${query}%`)
-      .limit(5)
+    const query = request.nextUrl.searchParams.get('q')?.trim()
 
-    // 🔍 Buscar en Prestatarios (por nombre, teléfono, email)
-    const {  prestatarios } = await supabase
+    if (!query || query.length < 2) {
+      return NextResponse.json({ success: true, results: { prestamos: [], prestatarios: [], leads: [], pagos: [] }, total: 0 })
+    }
+
+    console.log('🔍 Buscando en API:', query)
+    const pattern = `%${query}%`
+
+    // ==========================================
+    // 🔍 BÚSQUEDA 1: PRESTATARIOS (Estrategia simplificada)
+    // ==========================================
+    let prestatariosEncontrados: any[] = []
+
+    // 1. Buscar por Nombre
+    const {  data: porNombre } = await supabase
       .from('prestatarios')
-      .select('*')
-      .or(`nombre.ilike.%${query}%,apellido.ilike.%${query}%,telefono.ilike.%${query}%,email.ilike.%${query}%`)
-      .limit(5)
+      .select('id, nombre, apellido, telefono, email, estado')
+      .ilike('nombre', pattern)
+      .limit(10)
+    
+    if (porNombre) prestatariosEncontrados = [...prestatariosEncontrados, ...porNombre]
 
-    // 🔍 Buscar en Leads (por nombre, teléfono)
+    // 2. Buscar por Apellido (y unir resultados evitando duplicados)
+    const {  data: porApellido } = await supabase
+      .from('prestatarios')
+      .select('id, nombre, apellido, telefono, email, estado')
+      .ilike('apellido', pattern)
+      .limit(10)
+
+    if (porApellido) {
+      porApellido.forEach(item => {
+        if (!prestatariosEncontrados.find(p => p.id === item.id)) {
+          prestatariosEncontrados.push(item)
+        }
+      })
+    }
+
+    console.log('✅ Prestatarios encontrados:', prestatariosEncontrados.length)
+
+    // ==========================================
+    // 🔍 BÚSQUEDA 2: LEADS (Simple)
+    // ==========================================
     const {  leads } = await supabase
       .from('leads')
-      .select('*')
-      .or(`nombre.ilike.%${query}%,apellido.ilike.%${query}%,telefono.ilike.%${query}%`)
-      .limit(5)
+      .select('id, nombre, apellido, telefono, origen, estado')
+      .or(`nombre.ilike.${pattern},apellido.ilike.${pattern}`) // Leads suele funcionar con .or()
+      .limit(10)
 
-    // 🔍 Buscar en Pagos (por monto)
-    const {  pagos } = await supabase
-      .from('pagos')
-      .select(`
-        id,
-        monto,
-        fecha_pago,
-        tipo,
-        prestamo:prestamos (
-          prestatario:prestatarios (
-            nombre,
-            apellido
-          )
-        )
-      `)
-      .ilike('monto', `%${query}%`)
-      .limit(5)
+    // ==========================================
+    // 🔍 BÚSQUEDA 3: PRÉSTAMOS (Vía IDs de prestatarios)
+    // ==========================================
+    let prestamos = []
+    if (prestatariosEncontrados.length > 0) {
+      const ids = prestatariosEncontrados.map(p => p.id)
+      const {  data } = await supabase
+        .from('prestamos')
+        .select(`
+          id, monto_principal, saldo_pendiente, estado,
+          prestatario:prestatarios(nombre, apellido)
+        `)
+        .in('prestatario_id', ids)
+        .limit(10)
+      
+      if (data) prestamos = data
+    }
+
+    // ==========================================
+    // 🔍 BÚSQUEDA 4: PAGOS (Vía IDs de préstamos)
+    // ==========================================
+    let pagos = []
+    if (prestatariosEncontrados.length > 0) {
+      // Necesitamos los IDs de préstamos de estos clientes
+      const {  loanData } = await supabase
+        .from('prestamos')
+        .select('id')
+        .in('prestatario_id', prestatariosEncontrados.map(p => p.id))
+      
+      const loanIds = loanData?.map((l: any) => l.id) || []
+      
+      if (loanIds.length > 0) {
+        const {  data } = await supabase
+          .from('pagos')
+          .select(`
+            id, monto, fecha_pago,
+            prestamo:prestamos(id, prestatario:prestatarios(nombre, apellido))
+          `)
+          .in('prestamo_id', loanIds)
+          .limit(10)
+        
+        if (data) pagos = data
+      }
+    }
 
     return NextResponse.json({
       success: true,
       results: {
-        prestamos: prestamos || [],
-        prestatarios: prestatarios || [],
+        prestamos,
+        prestatarios: prestatariosEncontrados,
         leads: leads || [],
-        pagos: pagos || []
+        pagos
       },
-      total: (prestamos?.length || 0) + (prestatarios?.length || 0) + (leads?.length || 0) + (pagos?.length || 0)
+      total: prestamos.length + prestatariosEncontrados.length + (leads?.length || 0) + pagos.length
     })
+
   } catch (error: any) {
+    console.error('❌ Error API Search:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
