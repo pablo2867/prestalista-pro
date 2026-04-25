@@ -1,11 +1,10 @@
-// app/leads/page.tsx - VERSIÓN MÓVIL OPTIMIZADA (ÚLTIMA)
+// app/leads/page.tsx - VERSIÓN CORREGIDA (Botón Nuevo Lead funcional)
 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../lib/AuthContext'
 import ProtectedRoute from '../lib/ProtectedRoute'
-import { useGlobalContext } from '../lib/GlobalContext'
 
 export default function LeadsPage() {
   const { user, signOut, isAdmin, isDistributor } = useAuth()
@@ -23,8 +22,6 @@ export default function LeadsPage() {
     notas: '' 
   })
   const [formLoading, setFormLoading] = useState(false)
-
-  const { triggerLeadsUpdate } = useGlobalContext()
 
   useEffect(() => {
     loadLeads()
@@ -56,7 +53,6 @@ export default function LeadsPage() {
         setFormData({ nombre: '', telefono: '', fuente: 'referido', monto_potencial: '', notas: '' })
         setShowForm(false)
         loadLeads()
-        triggerLeadsUpdate()
       } else {
         alert('❌ ' + result.error)
       }
@@ -74,10 +70,7 @@ export default function LeadsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado: nuevoEstado })
       })
-      if (res.ok) {
-        loadLeads()
-        triggerLeadsUpdate()
-      }
+      if (res.ok) loadLeads()
     } catch (err) { console.error(err) }
   }
 
@@ -93,7 +86,6 @@ export default function LeadsPage() {
       if (result.success) {
         alert('✅ Cliente creado exitosamente')
         loadLeads()
-        triggerLeadsUpdate()
       } else {
         alert('❌ ' + result.error)
       }
@@ -123,6 +115,12 @@ export default function LeadsPage() {
       case 'convertido': return { backgroundColor: '#065f46', color: '#34d399' }
       default: return { backgroundColor: '#374151', color: '#9ca3af' }
     }
+  }
+
+  // ✅ Función separada para toggle con logging
+  const toggleForm = () => {
+    console.log('🔘 Toggle form - current:', showForm, '-> new:', !showForm)
+    setShowForm(prev => !prev)
   }
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>⏳ Cargando...</div>
@@ -196,32 +194,77 @@ export default function LeadsPage() {
                 <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>🎯 Mis Leads</h1>
                 <p style={{ margin: '6px 0 0', opacity: 0.9 }}>Gestiona tu pipeline de ventas y oportunidades</p>
               </div>
+              
+              {/* 🔘 BOTÓN NUEVO LEAD - CORREGIDO */}
               <button 
-                onClick={() => setShowForm(!showForm)} 
-                style={{ padding: '12px 24px', backgroundColor: '#fff', color: '#2563eb', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}
+                onClick={toggleForm}
+                style={{ 
+                  padding: '12px 24px', 
+                  backgroundColor: showForm ? '#ef4444' : '#ffffff', 
+                  color: showForm ? '#fff' : '#2563eb', 
+                  border: 'none', 
+                  borderRadius: '8px', 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold', 
+                  fontSize: 14, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 8,
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!showForm) (e.currentTarget as HTMLElement).style.backgroundColor = '#f3f4f6'
+                }}
+                onMouseLeave={(e) => {
+                  if (!showForm) (e.currentTarget as HTMLElement).style.backgroundColor = '#ffffff'
+                }}
               >
-                {showForm ? '❌ Cerrar Formulario' : '➕ Nuevo Lead'}
+                {showForm ? '❌ Cerrar' : '➕ Nuevo Lead'}
               </button>
             </div>
           </div>
 
-          {/* Formulario de Lead (Colapsable) */}
+          {/* Formulario de Lead (Colapsable) - CORREGIDO */}
           {showForm && (
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+            <div style={{ 
+              backgroundColor: '#111827', 
+              border: '1px solid #1f2937', 
+              borderRadius: 12, 
+              padding: 24, 
+              marginBottom: 24,
+              animation: 'slideDown 0.3s ease'
+            }}>
+              <style>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
               <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600 }}>📝 Nuevo Lead</h2>
               <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Nombre *</label>
-                    <input type="text" value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                    <input 
+                      type="text" 
+                      value={formData.nombre} 
+                      onChange={(e) => setFormData({...formData, nombre: e.target.value})} 
+                      required 
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} 
+                    />
                   </div>
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Teléfono *</label>
-                    <input type="tel" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                    <input 
+                      type="tel" 
+                      value={formData.telefono} 
+                      onChange={(e) => setFormData({...formData, telefono: e.target.value})} 
+                      required 
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} 
+                    />
                   </div>
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Fuente</label>
-                    <select value={formData.fuente} onChange={(e) => setFormData({...formData, fuente: e.target.value})} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }}>
+                    <select 
+                      value={formData.fuente} 
+                      onChange={(e) => setFormData({...formData, fuente: e.target.value})} 
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }}
+                    >
                       <option value="referido">Referido</option>
                       <option value="redes">Redes Sociales</option>
                       <option value="llamada">Llamada en Frío</option>
@@ -230,11 +273,33 @@ export default function LeadsPage() {
                   </div>
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Monto Potencial</label>
-                    <input type="number" value={formData.monto_potencial} onChange={(e) => setFormData({...formData, monto_potencial: e.target.value})} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                    <input 
+                      type="number" 
+                      value={formData.monto_potencial} 
+                      onChange={(e) => setFormData({...formData, monto_potencial: e.target.value})} 
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} 
+                    />
                   </div>
                 </div>
                 <div style={{ marginTop: 16 }}>
-                  <button type="submit" disabled={formLoading} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #2563eb, #3b82f6)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}>💾 Guardar Lead</button>
+                  <button 
+                    type="submit" 
+                    disabled={formLoading} 
+                    style={{ 
+                      width: '100%', 
+                      padding: '14px', 
+                      background: 'linear-gradient(135deg, #2563eb, #3b82f6)', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      cursor: formLoading ? 'not-allowed' : 'pointer', 
+                      fontWeight: 'bold', 
+                      fontSize: 16,
+                      opacity: formLoading ? 0.7 : 1
+                    }}
+                  >
+                    {formLoading ? '⏳ Guardando...' : '💾 Guardar Lead'}
+                  </button>
                 </div>
               </form>
             </div>
@@ -265,7 +330,7 @@ export default function LeadsPage() {
             
             {leads.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 60, color: '#6b7280', backgroundColor: '#111827', borderRadius: 12 }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}></div>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
                 <p>No hay leads registrados aún.</p>
               </div>
             ) : (
@@ -306,7 +371,7 @@ export default function LeadsPage() {
                           color: '#fff', 
                           border: 'none', 
                           borderRadius: '8px', 
-                          cursor: 'pointer', 
+                          cursor: lead.estado === 'convertido' ? 'not-allowed' : 'pointer', 
                           fontSize: 14,
                           fontWeight: 600 
                         }}
