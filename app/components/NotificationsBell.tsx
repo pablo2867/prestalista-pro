@@ -1,7 +1,7 @@
-// app/components/NotificationsBell.tsx
+// app/components/NotificationsBell.tsx - VERSIÓN CORREGIDA
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'  // ✅ Agregamos useRef
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '../lib/AuthContext'
 
@@ -26,6 +26,9 @@ export default function NotificationsBell() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  
+  // ✅ Referencia para guardar el canal de realtime
+  const channelRef = useRef<any>(null)
 
   // 🔔 Cargar notificaciones al montar
   useEffect(() => {
@@ -33,8 +36,11 @@ export default function NotificationsBell() {
       fetchNotifications()
       setupRealtimeSubscription()
     }
+    // ✅ Cleanup corregido: usar removeChannel en lugar de removeAllSubscriptions
     return () => {
-      supabase.removeAllSubscriptions()
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+      }
     }
   }, [user])
 
@@ -67,7 +73,8 @@ export default function NotificationsBell() {
 
   // 🔄 Suscribirse a cambios en tiempo real
   const setupRealtimeSubscription = () => {
-    const channel = supabase
+    // ✅ Guardar referencia del canal para poder removerlo después
+    channelRef.current = supabase
       .channel('notifications_changes')
       .on(
         'postgres_changes',
@@ -89,10 +96,6 @@ export default function NotificationsBell() {
         }
       )
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
   }
 
   // 🍞 Mostrar toast notification
