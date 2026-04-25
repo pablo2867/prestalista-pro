@@ -1,12 +1,14 @@
-// app/dashboard/page.tsx - VERSIÓN CORREGIDA CON IMPORTS
+// app/dashboard/page.tsx - VERSIÓN FINAL CON NOTIFICACIONES
 'use client'
 
-import { useState, useEffect, useRef } from 'react'  // ✅ useRef agregado aquí
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useGlobalContext } from '../lib/GlobalContext'
 import { useAuth } from '../lib/AuthContext'
 import ProtectedRoute from '../lib/ProtectedRoute'
 import { createClient } from '@supabase/supabase-js'
+// 🔔 Import del componente de notificaciones
+import NotificationsBell from '../components/NotificationsBell'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -223,7 +225,7 @@ export default function DashboardPage() {
         {/* Main Content */}
         <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
           
-          {/* 🔴 BOTÓN HAMBURGUESA - POSICIÓN CORREGIDA */}
+          {/* 🔴 BOTÓN HAMBURGUESA */}
           <button 
             className="mobile-menu-btn" 
             onClick={() => setSidebarOpen(true)} 
@@ -251,9 +253,14 @@ export default function DashboardPage() {
               <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>Dashboard General</h1>
               <p style={{ margin: '6px 0 0', opacity: 0.9 }}>Vista ejecutiva de tu negocio de préstamos</p>
             </div>
-            <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+            
+            {/* 🔔 Header con botones + campana de notificaciones */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
               <button onClick={() => window.print()} className="no-print" style={{ flex: 1, padding: '12px 20px', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>🖨️ Imprimir</button>
               <button onClick={exportarDashboard} className="no-print" style={{ flex: 1, padding: '12px 20px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📥 Exportar Excel</button>
+              
+              {/* 🔔 Campana de notificaciones */}
+              <NotificationsBell />
             </div>
           </div>
 
