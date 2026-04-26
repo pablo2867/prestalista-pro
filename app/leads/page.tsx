@@ -1,4 +1,4 @@
-// app/leads/page.tsx - VERSIÓN FINAL: SOLUCIÓN AL LAG DE MÓVIL
+// app/leads/page.tsx - VERSIÓN FINAL: SPLIT DE NOMBRE/APPELLIDO
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -26,44 +26,47 @@ export default function LeadsPage() {
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
-  // ✅ SOLUCIÓN: Usar FormData nativo para evitar el lag del teclado en móviles
+  // ✅ SOLUCIÓN DEFINITIVA: Separar Nombre y Apellido automáticamente
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // 1. Obtener datos directamente del DOM (funciona perfecto en móvil)
+    // 1. Obtener datos del formulario
     const formElement = e.target as HTMLFormElement
     const datos = new FormData(formElement)
     
-    const nombre = (datos.get('nombre') as string)?.trim()
-    const telefono = (datos.get('telefono') as string)?.trim()
-    const fuente = datos.get('fuente') as string
-    const monto = datos.get('monto_potencial') as string
+    const nombreCompleto = (datos.get('nombre') as string)?.trim() || ''
+    const telefono = (datos.get('telefono') as string)?.trim() || ''
+    
+    if (!nombreCompleto || !telefono) return alert('👤 Nombre y teléfono son obligatorios')
 
-    // 2. Validar datos extraídos
-    if (!nombre || !telefono) {
-      return alert('👤 Nombre y teléfono son obligatorios')
-    }
+    // 2. Separar el nombre completo en partes
+    // Si el usuario escribe "Eddy A Flores":
+    // nombre = "Eddy"
+    // apellido = "A Flores"
+    const partes = nombreCompleto.split(' ')
+    const nombre = partes[0]
+    const apellido = partes.length > 1 ? partes.slice(1).join(' ') : 'N/A'
 
     setFormLoading(true)
     try {
-      // 3. Enviar datos a la API
+      // 3. Enviar nombre y apellido por separado a la API
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           nombre, 
+          apellido, // ✅ AQUÍ ESTÁ LA MAGIA
           telefono, 
-          fuente, 
-          monto_potencial: monto, 
-          notas: '' 
+          fuente: datos.get('fuente'),
+          monto_potencial: datos.get('monto_potencial'),
+          notas: ''
         })
       })
+      
       const result = await res.json()
       
       if (result.success) {
         alert('✅ Lead registrado exitosamente')
-        
-        // 4. Resetear el formulario nativamente
         formElement.reset()
         setShowForm(false)
         loadLeads()
@@ -122,7 +125,7 @@ export default function LeadsPage() {
     <ProtectedRoute>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui', color: 'white' }}>
         
-        {/* 📱 CSS RESPONSIVE - OVERLAY CORREGIDO */}
+        {/* 📱 CSS RESPONSIVE */}
         <style>{`
           @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
@@ -130,7 +133,6 @@ export default function LeadsPage() {
             .main { margin-left: 0 !important; padding: 16px !important; }
             .grid-stats { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
             .mobile-menu-btn { display: flex !important; }
-            /* ✅ Overlay controlado por JS, no por CSS */
             button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
             input, select, textarea, button { -webkit-user-select: auto; user-select: auto; }
           }
@@ -141,7 +143,7 @@ export default function LeadsPage() {
           @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         `}</style>
 
-        {/* ✅ Overlay controlado por React */}
+        {/* Overlay controlado por React */}
         <div 
           className="overlay" 
           onClick={() => setSidebarOpen(false)} 
@@ -193,7 +195,6 @@ export default function LeadsPage() {
         {/* Main Content */}
         <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
           
-          {/* 🔴 BOTÓN HAMBURGUESA */}
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', position: 'fixed', top: '70px', left: '16px', zIndex: 100, padding: '10px 14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>☰</button>
           
           {/* Header */}
@@ -257,34 +258,30 @@ export default function LeadsPage() {
               
               <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#1f2937' }}>📝 Registrar Lead</h2>
               
-              {/* ✅ Formulario con name attributes para FormData */}
               <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
                   <div>
-                    <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Nombre *</label>
-                    {/* ✅ name="nombre" es clave */}
+                    <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Nombre y Apellido *</label>
                     <input 
                       name="nombre"
                       type="text" 
-                      placeholder="Ej: Juan Pérez" 
+                      placeholder="Ej: Eddy A Flores" 
                       required 
                       style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} 
                     />
                   </div>
                   <div>
                     <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Teléfono *</label>
-                    {/* ✅ name="telefono" es clave */}
                     <input 
                       name="telefono"
                       type="tel" 
-                      placeholder="Ej: 5512345678" 
+                      placeholder="Ej: 9934023786" 
                       required 
                       style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} 
                     />
                   </div>
                   <div>
                     <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Fuente</label>
-                    {/* ✅ name="fuente" es clave */}
                     <select 
                       name="fuente"
                       style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }}
@@ -297,11 +294,10 @@ export default function LeadsPage() {
                   </div>
                   <div>
                     <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Monto Potencial</label>
-                    {/* ✅ name="monto_potencial" es clave */}
                     <input 
                       name="monto_potencial"
                       type="number" 
-                      placeholder="Ej: 50000" 
+                      placeholder="Ej: 60000" 
                       style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} 
                     />
                   </div>
@@ -334,7 +330,7 @@ export default function LeadsPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 18, color: 'white' }}>{lead.nombre?.[0]}</div>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 16, color: 'white' }}>{lead.nombre}</div>
+                          <div style={{ fontWeight: 600, fontSize: 16, color: 'white' }}>{lead.nombre} {lead.apellido}</div>
                           <div style={{ fontSize: 13, color: '#9ca3af' }}>📞 {lead.telefono}</div>
                         </div>
                       </div>
