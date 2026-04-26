@@ -1,7 +1,7 @@
-// app/components/NotificationsBell.tsx - VERSIÓN CORREGIDA
+// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON AUDIO
 'use client'
 
-import { useState, useEffect, useRef } from 'react'  // ✅ Agregamos useRef
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useAuth } from '../lib/AuthContext'
 
@@ -29,6 +29,8 @@ export default function NotificationsBell() {
   
   // ✅ Referencia para guardar el canal de realtime
   const channelRef = useRef<any>(null)
+  // ✅ Referencia para AudioContext (reutilizable)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   // 🔔 Cargar notificaciones al montar
   useEffect(() => {
@@ -36,13 +38,51 @@ export default function NotificationsBell() {
       fetchNotifications()
       setupRealtimeSubscription()
     }
-    // ✅ Cleanup corregido: usar removeChannel en lugar de removeAllSubscriptions
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
       }
+      // Limpiar audio context al desmontar
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+      }
     }
   }, [user])
+
+  // 🔊 Función para reproducir sonido de notificación
+  const playNotificationSound = () => {
+    try {
+      // Reutilizar AudioContext si ya existe
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      }
+      
+      const audioContext = audioContextRef.current
+      if (audioContext.state === 'suspended') {
+        audioContext.resume()
+      }
+      
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      // Configuración del sonido "ding"
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime) // Frecuencia inicial (La5)
+      oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.3) // Bajada a La4
+      oscillator.type = 'sine'
+      
+      // Volumen: inicio suave, luego desvanecimiento
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
+      
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.5)
+    } catch (err) {
+      console.log('🔇 Audio no reproducido (permisos o contexto):', err)
+    }
+  }
 
   const fetchNotifications = async () => {
     try {
@@ -54,7 +94,6 @@ export default function NotificationsBell() {
         .order('created_at', { ascending: false })
         .limit(20)
 
-      // 🔐 Filtrar por rol si no es admin
       if (!isAdmin() && isDistributor() && user?.id) {
         query = query.eq('distribuidor_id', user.id)
       }
@@ -73,7 +112,6 @@ export default function NotificationsBell() {
 
   // 🔄 Suscribirse a cambios en tiempo real
   const setupRealtimeSubscription = () => {
-    // ✅ Guardar referencia del canal para poder removerlo después
     channelRef.current = supabase
       .channel('notifications_changes')
       .on(
@@ -86,7 +124,9 @@ export default function NotificationsBell() {
         },
         (payload) => {
           const newNotification = payload.new as Notification
-          // Mostrar toast automáticamente
+          // ✅ Reproducir sonido ANTES de mostrar el toast
+          playNotificationSound()
+          // Mostrar toast
           showToast(newNotification.title, newNotification.message)
           // Agregar a la lista
           setNotifications(prev => [newNotification, ...prev])
