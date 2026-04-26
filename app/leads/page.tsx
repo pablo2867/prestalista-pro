@@ -1,4 +1,4 @@
-// app/leads/page.tsx - VERSIÓN FINAL SIMPLIFICADA
+// app/leads/page.tsx - VERSIÓN FINAL CON OVERLAY CORREGIDO PARA MÓVIL
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -94,6 +94,7 @@ export default function LeadsPage() {
     <ProtectedRoute>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui', color: 'white' }}>
         
+        {/* 📱 CSS RESPONSIVE - OVERLAY CORREGIDO */}
         <style>{`
           @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
@@ -101,16 +102,34 @@ export default function LeadsPage() {
             .main { margin-left: 0 !important; padding: 16px !important; }
             .grid-stats { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
             .mobile-menu-btn { display: flex !important; }
-            .overlay { display: block !important; }
+            /* ✅ ELIMINADO: .overlay { display: block !important; } (esto bloqueaba los clicks en móvil) */
+            button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+            input, select, textarea, button { -webkit-user-select: auto; user-select: auto; }
           }
           @media (min-width: 769px) {
             .overlay { display: none !important; }
             .mobile-menu-btn { display: none !important; }
           }
+          @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         `}</style>
 
-        <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
+        {/* ✅ Overlay controlado por React (solo aparece cuando el menú está abierto) */}
+        <div 
+          className="overlay" 
+          onClick={() => setSidebarOpen(false)} 
+          style={{ 
+            display: sidebarOpen ? 'block' : 'none', 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            backgroundColor: 'rgba(0,0,0,0.5)', 
+            zIndex: 40 
+          }} 
+        />
 
+        {/* Sidebar */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '260px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed' as const, top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column' as const, zIndex: 50 }}>
           <div style={{ padding: '20px', borderBottom: '1px solid #1f2937', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -143,8 +162,10 @@ export default function LeadsPage() {
           </div>
         </aside>
 
+        {/* Main Content */}
         <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
           
+          {/* 🔴 BOTÓN HAMBURGUESA */}
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', position: 'fixed', top: '70px', left: '16px', zIndex: 100, padding: '10px 14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>☰</button>
           
           {/* Header */}
@@ -158,23 +179,29 @@ export default function LeadsPage() {
               <button 
                 onClick={() => setShowForm(prev => !prev)}
                 style={{ 
-                  padding: '12px 24px', 
+                  padding: '14px 28px', 
                   backgroundColor: showForm ? '#dc2626' : '#ffffff', 
                   color: showForm ? '#fff' : '#2563eb', 
-                  border: 'none',
-                  borderRadius: '8px', 
+                  border: '3px solid #2563eb',
+                  borderRadius: '10px', 
                   cursor: 'pointer', 
                   fontWeight: 'bold', 
-                  fontSize: 14,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                  fontSize: 15,
+                  boxShadow: '0 6px 16px rgba(0,0,0,0.3)',
+                  transition: 'all 0.2s ease',
+                  zIndex: 60,
+                  position: 'relative' as const,
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation',
+                  minWidth: '160px'
                 }}
               >
-                {showForm ? '✕ Cerrar Formulario' : '＋ Nuevo Lead'}
+                {showForm ? '✕ Cerrar' : '＋ Nuevo Lead'}
               </button>
             </div>
           </div>
 
-          {/* ✅ FORMULARIO - SIN OPTIMIZACIONES COMPLEJAS */}
+          {/* ✅ FORMULARIO */}
           {showForm && (
             <div style={{ 
               backgroundColor: '#ffffff',
@@ -183,7 +210,10 @@ export default function LeadsPage() {
               borderRadius: 12, 
               padding: 24, 
               marginBottom: 24,
-              boxShadow: '0 10px 40px rgba(0,0,0,0.4)'
+              boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
+              animation: 'slideDown 0.3s ease',
+              position: 'relative',
+              zIndex: 70
             }}>
               <div style={{ 
                 backgroundColor: '#22c55e', 
