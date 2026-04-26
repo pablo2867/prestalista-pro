@@ -1,4 +1,4 @@
-// app/leads/page.tsx - VERSIÓN FINAL CORREGIDA
+// app/leads/page.tsx - VERSIÓN FINAL CON ALTO CONTRASTE
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -31,6 +31,7 @@ export default function LeadsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation() // ✅ Prevenir propagación
     if (!formData.nombre || !formData.telefono) return alert('👤 Nombre y teléfono son obligatorios')
     setFormLoading(true)
     try {
@@ -156,7 +157,8 @@ export default function LeadsPage() {
               </div>
               
               <button 
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation() // ✅ Prevenir propagación
                   console.log('🔘 Click - showForm:', showForm, '->', !showForm)
                   setShowForm(prev => !prev)
                 }}
@@ -170,7 +172,8 @@ export default function LeadsPage() {
                   fontWeight: 'bold', 
                   fontSize: 14,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  zIndex: 50 // ✅ Asegurar que está por encima
                 }}
               >
                 {showForm ? '✕ Cerrar Formulario' : '＋ Nuevo Lead'}
@@ -178,36 +181,51 @@ export default function LeadsPage() {
             </div>
           </div>
 
-          {/* ✅ FORMULARIO - AHORA APARECE INMEDIATAMENTE DESPUÉS DEL HEADER */}
+          {/* ✅ FORMULARIO CON ALTO CONTRASTE - IMPOSIBLE DE NO VER */}
           {showForm && (
             <div style={{ 
-              backgroundColor: '#111827', 
-              border: '3px solid #22c55e',
+              backgroundColor: '#ffffff',  // ✅ CAMBIO CLAVE: Fondo BLANCO para máximo contraste
+              color: '#1f2937',            // ✅ Texto oscuro para leer en fondo blanco
+              border: '4px solid #22c55e', // ✅ Borde verde grueso
               borderRadius: 12, 
               padding: 24, 
               marginBottom: 24,
-              boxShadow: '0 0 20px rgba(34,197,94,0.3)',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.4)', // ✅ Sombra pronunciada
               animation: 'slideDown 0.3s ease'
             }}>
               <style>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }`}</style>
               
-              <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 8 }}>
-                ✅ Formulario de Nuevo Lead
+              {/* Banner superior muy visible */}
+              <div style={{ 
+                backgroundColor: '#22c55e', 
+                color: 'white', 
+                padding: '10px 16px', 
+                borderRadius: 8, 
+                marginBottom: 20, 
+                fontWeight: 'bold', 
+                textAlign: 'center',
+                fontSize: 15
+              }}>
+                ✅ Formulario de Nuevo Lead - ¡Visible!
+              </div>
+              
+              <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
+                📝 Registrar Lead
               </h2>
               
               <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
                   <div>
-                    <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6, display: 'block' }}>Nombre *</label>
-                    <input type="text" placeholder="Ej: Juan Pérez" value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '2px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                    <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Nombre *</label>
+                    <input type="text" placeholder="Ej: Juan Pérez" value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} />
                   </div>
                   <div>
-                    <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6, display: 'block' }}>Teléfono *</label>
-                    <input type="tel" placeholder="Ej: 5512345678" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '2px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                    <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Teléfono *</label>
+                    <input type="tel" placeholder="Ej: 5512345678" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} />
                   </div>
                   <div>
-                    <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6, display: 'block' }}>Fuente</label>
-                    <select value={formData.fuente} onChange={(e) => setFormData({...formData, fuente: e.target.value})} style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '2px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }}>
+                    <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Fuente</label>
+                    <select value={formData.fuente} onChange={(e) => setFormData({...formData, fuente: e.target.value})} style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }}>
                       <option value="referido">Referido</option>
                       <option value="redes">Redes Sociales</option>
                       <option value="llamada">Llamada en Frío</option>
@@ -215,12 +233,31 @@ export default function LeadsPage() {
                     </select>
                   </div>
                   <div>
-                    <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6, display: 'block' }}>Monto Potencial</label>
-                    <input type="number" placeholder="Ej: 50000" value={formData.monto_potencial} onChange={(e) => setFormData({...formData, monto_potencial: e.target.value})} style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '2px solid #374151', borderRadius: '8px', color: 'white', fontSize: 16 }} />
+                    <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Monto Potencial</label>
+                    <input type="number" placeholder="Ej: 50000" value={formData.monto_potencial} onChange={(e) => setFormData({...formData, monto_potencial: e.target.value})} style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} />
                   </div>
                 </div>
                 <button type="submit" disabled={formLoading} style={{ width: '100%', marginTop: 20, padding: '16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}>{formLoading ? '⏳ Guardando...' : '💾 GUARDAR LEAD'}</button>
               </form>
+              
+              {/* Botón de cerrar visible */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); setShowForm(false) }}
+                style={{ 
+                  marginTop: 16,
+                  width: '100%',
+                  padding: '10px', 
+                  backgroundColor: '#fee2e2', 
+                  color: '#dc2626', 
+                  border: '2px solid #dc2626',
+                  borderRadius: '8px', 
+                  cursor: 'pointer', 
+                  fontWeight: 600, 
+                  fontSize: 14
+                }}
+              >
+                ✕ Cerrar este formulario
+              </button>
             </div>
           )}
 
