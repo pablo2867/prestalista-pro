@@ -1,7 +1,7 @@
-// app/leads/page.tsx - VERSIÓN FINAL CON INPUTS FUNCIONALES EN MÓVIL
+// app/leads/page.tsx - VERSIÓN FINAL SIMPLIFICADA
 'use client'
 
-import { useState, useEffect, useRef } from 'react'  // ✅ Agregamos useRef
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../lib/AuthContext'
 import ProtectedRoute from '../lib/ProtectedRoute'
@@ -17,22 +17,8 @@ export default function LeadsPage() {
     nombre: '', telefono: '', fuente: 'referido', monto_potencial: '', notas: '' 
   })
   const [formLoading, setFormLoading] = useState(false)
-  
-  // ✅ Refs para manejar foco y prevenir re-renders problemáticos
-  const formRef = useRef<HTMLDivElement>(null)
-  const nombreInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadLeads() }, [])
-
-  // ✅ Enfocar el primer input cuando se abre el formulario
-  useEffect(() => {
-    if (showForm && nombreInputRef.current) {
-      // Pequeño delay para asegurar que el elemento está montado
-      setTimeout(() => {
-        nombreInputRef.current?.focus()
-      }, 100)
-    }
-  }, [showForm])
 
   const loadLeads = async () => {
     try {
@@ -45,7 +31,6 @@ export default function LeadsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    e.stopPropagation()
     if (!formData.nombre || !formData.telefono) return alert('👤 Nombre y teléfono son obligatorios')
     setFormLoading(true)
     try {
@@ -62,15 +47,6 @@ export default function LeadsPage() {
         loadLeads()
       } else { alert('❌ ' + result.error) }
     } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
-  }
-
-  // ✅ Función optimizada para actualizar formData (previene re-renders innecesarios)
-  const updateFormData = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => {
-      // Solo actualizar si el valor realmente cambió
-      if (prev[field] === value) return prev
-      return { ...prev, [field]: value }
-    })
   }
 
   const updateStatus = async (id: string, nuevoEstado: string) => {
@@ -126,11 +102,6 @@ export default function LeadsPage() {
             .grid-stats { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
             .mobile-menu-btn { display: flex !important; }
             .overlay { display: block !important; }
-            /* ✅ Asegurar que los inputs sean clickeables en móvil */
-            input, select, textarea { 
-              -webkit-tap-highlight-color: transparent; 
-              touch-action: manipulation;
-            }
           }
           @media (min-width: 769px) {
             .overlay { display: none !important; }
@@ -185,11 +156,7 @@ export default function LeadsPage() {
               </div>
               
               <button 
-                onClick={(e) => {
-                  e.stopPropagation()
-                  console.log('🔘 Click - showForm:', showForm, '->', !showForm)
-                  setShowForm(prev => !prev)
-                }}
+                onClick={() => setShowForm(prev => !prev)}
                 style={{ 
                   padding: '12px 24px', 
                   backgroundColor: showForm ? '#dc2626' : '#ffffff', 
@@ -199,9 +166,7 @@ export default function LeadsPage() {
                   cursor: 'pointer', 
                   fontWeight: 'bold', 
                   fontSize: 14,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                  transition: 'all 0.2s ease',
-                  zIndex: 50
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                 }}
               >
                 {showForm ? '✕ Cerrar Formulario' : '＋ Nuevo Lead'}
@@ -209,30 +174,17 @@ export default function LeadsPage() {
             </div>
           </div>
 
-          {/* ✅ FORMULARIO CON INPUTS FUNCIONALES EN MÓVIL */}
+          {/* ✅ FORMULARIO - SIN OPTIMIZACIONES COMPLEJAS */}
           {showForm && (
-            <div 
-              ref={formRef}
-              key={`form-${showForm}`}  // ✅ Key única para forzar re-mount limpio
-              style={{ 
-                backgroundColor: '#ffffff',
-                color: '#1f2937',
-                border: '4px solid #22c55e',
-                borderRadius: 12, 
-                padding: 24, 
-                marginBottom: 24,
-                boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
-                animation: 'slideDown 0.3s ease',
-                // ✅ Asegurar que los eventos de toque funcionen
-                touchAction: 'manipulation',
-                pointerEvents: 'auto' as const
-              }}
-              // ✅ Prevenir que clicks en el contenedor interfieran con los inputs
-              onClick={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-            >
-              <style>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-              
+            <div style={{ 
+              backgroundColor: '#ffffff',
+              color: '#1f2937',
+              border: '4px solid #22c55e',
+              borderRadius: 12, 
+              padding: 24, 
+              marginBottom: 24,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.4)'
+            }}>
               <div style={{ 
                 backgroundColor: '#22c55e', 
                 color: 'white', 
@@ -240,42 +192,24 @@ export default function LeadsPage() {
                 borderRadius: 8, 
                 marginBottom: 20, 
                 fontWeight: 'bold', 
-                textAlign: 'center',
-                fontSize: 15
+                textAlign: 'center'
               }}>
-                ✅ Formulario de Nuevo Lead - ¡Escribe aquí!
+                ✅ Formulario de Nuevo Lead
               </div>
               
-              <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
-                📝 Registrar Lead
-              </h2>
+              <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: '#1f2937' }}>📝 Registrar Lead</h2>
               
-              <form onSubmit={handleSubmit} style={{ pointerEvents: 'auto' }}>
+              <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
                   <div>
                     <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Nombre *</label>
                     <input 
-                      ref={nombreInputRef}  // ✅ Ref para enfoque automático
                       type="text" 
                       placeholder="Ej: Juan Pérez" 
                       value={formData.nombre} 
-                      onChange={(e) => updateFormData('nombre', e.target.value)}  // ✅ Función optimizada
-                      // ✅ Eventos adicionales para móvil
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setFormData({...formData, nombre: e.target.value})}
                       required 
-                      style={{ 
-                        width: '100%', 
-                        padding: '14px', 
-                        backgroundColor: '#f9fafb', 
-                        border: '2px solid #d1d5db', 
-                        borderRadius: '8px', 
-                        color: '#1f2937', 
-                        fontSize: 16,
-                        // ✅ Asegurar que el input sea interactivo
-                        pointerEvents: 'auto',
-                        WebkitTapHighlightColor: 'transparent'
-                      }} 
+                      style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} 
                     />
                   </div>
                   <div>
@@ -284,39 +218,17 @@ export default function LeadsPage() {
                       type="tel" 
                       placeholder="Ej: 5512345678" 
                       value={formData.telefono} 
-                      onChange={(e) => updateFormData('telefono', e.target.value)}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setFormData({...formData, telefono: e.target.value})}
                       required 
-                      style={{ 
-                        width: '100%', 
-                        padding: '14px', 
-                        backgroundColor: '#f9fafb', 
-                        border: '2px solid #d1d5db', 
-                        borderRadius: '8px', 
-                        color: '#1f2937', 
-                        fontSize: 16,
-                        pointerEvents: 'auto',
-                        WebkitTapHighlightColor: 'transparent'
-                      }} 
+                      style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} 
                     />
                   </div>
                   <div>
                     <label style={{ color: '#374151', fontSize: 14, marginBottom: 6, display: 'block', fontWeight: 600 }}>Fuente</label>
                     <select 
                       value={formData.fuente} 
-                      onChange={(e) => updateFormData('fuente', e.target.value)}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      style={{ 
-                        width: '100%', 
-                        padding: '14px', 
-                        backgroundColor: '#f9fafb', 
-                        border: '2px solid #d1d5db', 
-                        borderRadius: '8px', 
-                        color: '#1f2937', 
-                        fontSize: 16,
-                        pointerEvents: 'auto'
-                      }}
+                      onChange={(e) => setFormData({...formData, fuente: e.target.value})}
+                      style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }}
                     >
                       <option value="referido">Referido</option>
                       <option value="redes">Redes Sociales</option>
@@ -330,63 +242,13 @@ export default function LeadsPage() {
                       type="number" 
                       placeholder="Ej: 50000" 
                       value={formData.monto_potencial} 
-                      onChange={(e) => updateFormData('monto_potencial', e.target.value)}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ 
-                        width: '100%', 
-                        padding: '14px', 
-                        backgroundColor: '#f9fafb', 
-                        border: '2px solid #d1d5db', 
-                        borderRadius: '8px', 
-                        color: '#1f2937', 
-                        fontSize: 16,
-                        pointerEvents: 'auto',
-                        WebkitTapHighlightColor: 'transparent'
-                      }} 
+                      onChange={(e) => setFormData({...formData, monto_potencial: e.target.value})}
+                      style={{ width: '100%', padding: '14px', backgroundColor: '#f9fafb', border: '2px solid #d1d5db', borderRadius: '8px', color: '#1f2937', fontSize: 16 }} 
                     />
                   </div>
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={formLoading} 
-                  style={{ 
-                    width: '100%', 
-                    marginTop: 20, 
-                    padding: '16px', 
-                    background: '#2563eb', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '8px', 
-                    cursor: formLoading ? 'not-allowed' : 'pointer', 
-                    fontWeight: 'bold', 
-                    fontSize: 16,
-                    opacity: formLoading ? 0.7 : 1,
-                    touchAction: 'manipulation'
-                  }}
-                >
-                  {formLoading ? '⏳ Guardando...' : '💾 GUARDAR LEAD'}
-                </button>
+                <button type="submit" disabled={formLoading} style={{ width: '100%', marginTop: 20, padding: '16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}>{formLoading ? '⏳ Guardando...' : '💾 GUARDAR LEAD'}</button>
               </form>
-              
-              <button 
-                onClick={(e) => { e.stopPropagation(); setShowForm(false) }}
-                style={{ 
-                  marginTop: 16,
-                  width: '100%',
-                  padding: '10px', 
-                  backgroundColor: '#fee2e2', 
-                  color: '#dc2626', 
-                  border: '2px solid #dc2626',
-                  borderRadius: '8px', 
-                  cursor: 'pointer', 
-                  fontWeight: 600, 
-                  fontSize: 14,
-                  touchAction: 'manipulation'
-                }}
-              >
-                ✕ Cerrar este formulario
-              </button>
             </div>
           )}
 
