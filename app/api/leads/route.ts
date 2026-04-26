@@ -1,3 +1,4 @@
+// app/api/leads/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -30,15 +31,42 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { nombre, apellido, telefono, email, origen, monto_interes, proposito, prioridad, notas } = body
+    // Agregamos userId para saber a quién notificar
+    const { nombre, apellido, telefono, email, origen, monto_interes, proposito, prioridad, notas, userId } = body
+    
     if(!nombre||!apellido||!telefono) return NextResponse.json({success:false,error:'Nombre, apellido y teléfono son obligatorios'},{status:400})
+    
+    // 1. Insertar el Lead
     const {data:inserted,error} = await supabase.from('leads').insert({
       nombre:nombre.trim(), apellido:apellido.trim(), telefono:telefono.trim(),
       email:email?.trim()?.toLowerCase()||null, origen:origen||'otro',
       estado:'nuevo', monto_interes:monto_interes?parseFloat(monto_interes):null,
       proposito:proposito?.trim()||null, prioridad:prioridad||'media', notas:notas?.trim()||null
     }).select().single()
+    
     if(error) return NextResponse.json({success:false,error:error.message},{status:500})
+
+    // ✅ NUEVO: Crear la notificación en la base de datos
+    // Esto hará que el componente NotificationsBell suene y muestre la alerta
+    if (inserted) {
+        const notifPayload: any = {
+            type: 'nuevo_lead',
+            title: '🎯 Nuevo Lead',
+            message: `Se registró: ${nombre} ${apellido}`,
+            data: { lead_id: inserted.id },
+            read: false
+        }
+        
+        // Si el frontend envía el userId, lo asignamos. Si no, se guarda sin usuario (pero el registro se crea).
+        if (userId) {
+            notifPayload.user_id = userId
+        }
+
+        // Usamos la misma conexión supabase (con Service Role) para insertar
+        const { error: notifError } = await supabase.from('notifications').insert(notifPayload)
+        if(notifError) console.error('Error creando notificación:', notifError)
+    }
+
     return NextResponse.json({success:true,data:inserted},{status:201})
   } catch(err:any){
     return NextResponse.json({success:false,error:err.message},{status:500})
