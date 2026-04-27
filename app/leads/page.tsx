@@ -1,4 +1,4 @@
-// app/leads/page.tsx - VERSIÓN FINAL: SPLIT DE NOMBRE/APPELLIDO
+// app/leads/page.tsx - VERSIÓN FINAL CON userId PARA NOTIFICACIONES
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -26,11 +26,10 @@ export default function LeadsPage() {
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
-  // ✅ SOLUCIÓN DEFINITIVA: Separar Nombre y Apellido automáticamente
+  // ✅ SOLUCIÓN: Separar Nombre/Apellido + ENVIAR userId
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // 1. Obtener datos del formulario
     const formElement = e.target as HTMLFormElement
     const datos = new FormData(formElement)
     
@@ -39,27 +38,25 @@ export default function LeadsPage() {
     
     if (!nombreCompleto || !telefono) return alert('👤 Nombre y teléfono son obligatorios')
 
-    // 2. Separar el nombre completo en partes
-    // Si el usuario escribe "Eddy A Flores":
-    // nombre = "Eddy"
-    // apellido = "A Flores"
+    // Separar nombre y apellido
     const partes = nombreCompleto.split(' ')
     const nombre = partes[0]
     const apellido = partes.length > 1 ? partes.slice(1).join(' ') : 'N/A'
 
     setFormLoading(true)
     try {
-      // 3. Enviar nombre y apellido por separado a la API
+      // ✅ ENVIAR userId PARA QUE LA API PUEDA CREAR LA NOTIFICACIÓN
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           nombre, 
-          apellido, // ✅ AQUÍ ESTÁ LA MAGIA
+          apellido,
           telefono, 
           fuente: datos.get('fuente'),
           monto_potencial: datos.get('monto_potencial'),
-          notas: ''
+          notas: '',
+          userId: user?.id  // ✅ ESTO ES LO QUE FALTABA
         })
       })
       
