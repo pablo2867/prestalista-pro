@@ -1,4 +1,4 @@
-// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON AUDIO
+// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON AUDIO Y SOPORTE PARA PRÉSTAMOS
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -12,7 +12,8 @@ const supabase = createClient(
 
 interface Notification {
   id: string
-  type: 'vencimiento' | 'nuevo_lead' | 'pago_recibido'
+  // ✅ Agregamos 'nuevo_prestamo' como tipo válido
+  type: 'vencimiento' | 'nuevo_lead' | 'pago_recibido' | 'nuevo_prestamo'
   title: string
   message: string
   created_at: string
@@ -216,22 +217,24 @@ export default function NotificationsBell() {
     }
   }
 
-  // 🎨 Icono según tipo
+  // 🎨 Icono según tipo - ✅ ACTUALIZADO CON NUEVO PRESTAMO
   const getIcon = (type: string) => {
     switch (type) {
       case 'vencimiento': return '⏰'
       case 'nuevo_lead': return '🎯'
       case 'pago_recibido': return '💰'
+      case 'nuevo_prestamo': return '📄'  // ✅ Nuevo ícono para préstamos
       default: return '🔔'
     }
   }
 
-  // 🎨 Color según tipo
+  // 🎨 Color según tipo - ✅ ACTUALIZADO CON NUEVO PRESTAMO
   const getColor = (type: string) => {
     switch (type) {
       case 'vencimiento': return '#f87171'
       case 'nuevo_lead': return '#fbbf24'
       case 'pago_recibido': return '#34d399'
+      case 'nuevo_prestamo': return '#60a5fa'  // ✅ Azul para préstamos
       default: return '#60a5fa'
     }
   }
