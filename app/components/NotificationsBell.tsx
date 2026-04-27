@@ -1,18 +1,16 @@
-// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON AUDIO Y SOPORTE PARA PRÉSTAMOS
+// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON CLIENTE COMPARTIDO
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
+// ✅ IMPORTAR CLIENTE COMPARTIDO en lugar de crear uno nuevo
+import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// ❌ ELIMINADO: Ya no creamos un cliente nuevo aquí
+// const supabase = createClient(...)
 
 interface Notification {
   id: string
-  // ✅ Agregamos 'nuevo_prestamo' como tipo válido
   type: 'vencimiento' | 'nuevo_lead' | 'pago_recibido' | 'nuevo_prestamo'
   title: string
   message: string
@@ -28,12 +26,9 @@ export default function NotificationsBell() {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   
-  // ✅ Referencia para guardar el canal de realtime
   const channelRef = useRef<any>(null)
-  // ✅ Referencia para AudioContext (reutilizable)
   const audioContextRef = useRef<AudioContext | null>(null)
 
-  // 🔔 Cargar notificaciones al montar
   useEffect(() => {
     if (user) {
       fetchNotifications()
@@ -43,17 +38,14 @@ export default function NotificationsBell() {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
       }
-      // Limpiar audio context al desmontar
       if (audioContextRef.current) {
         audioContextRef.current.close()
       }
     }
   }, [user])
 
-  // 🔊 Función para reproducir sonido de notificación
   const playNotificationSound = () => {
     try {
-      // Reutilizar AudioContext si ya existe
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
       }
@@ -69,12 +61,10 @@ export default function NotificationsBell() {
       oscillator.connect(gainNode)
       gainNode.connect(audioContext.destination)
       
-      // Configuración del sonido "ding"
-      oscillator.frequency.setValueAtTime(880, audioContext.currentTime) // Frecuencia inicial (La5)
-      oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.3) // Bajada a La4
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime)
+      oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.3)
       oscillator.type = 'sine'
       
-      // Volumen: inicio suave, luego desvanecimiento
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
       
@@ -111,7 +101,6 @@ export default function NotificationsBell() {
     }
   }
 
-  // 🔄 Suscribirse a cambios en tiempo real
   const setupRealtimeSubscription = () => {
     channelRef.current = supabase
       .channel('notifications_changes')
@@ -125,23 +114,17 @@ export default function NotificationsBell() {
         },
         (payload) => {
           const newNotification = payload.new as Notification
-          // ✅ Reproducir sonido ANTES de mostrar el toast
           playNotificationSound()
-          // Mostrar toast
           showToast(newNotification.title, newNotification.message)
-          // Agregar a la lista
           setNotifications(prev => [newNotification, ...prev])
           setUnreadCount(prev => prev + 1)
-          // Vibrar el celular si está disponible
           if (navigator.vibrate) navigator.vibrate([100, 50, 100])
         }
       )
       .subscribe()
   }
 
-  // 🍞 Mostrar toast notification
   const showToast = (title: string, message: string) => {
-    // Crear elemento toast
     const toast = document.createElement('div')
     toast.style.cssText = `
       position: fixed;
@@ -176,14 +159,12 @@ export default function NotificationsBell() {
     
     document.body.appendChild(toast)
     
-    // Auto-remover después de 5 segundos
     setTimeout(() => {
       toast.style.animation = 'slideIn 0.3s ease reverse'
       setTimeout(() => toast.remove(), 300)
     }, 5000)
   }
 
-  // ✅ Marcar como leída
   const markAsRead = async (id: string) => {
     try {
       await supabase
@@ -200,7 +181,6 @@ export default function NotificationsBell() {
     }
   }
 
-  // 🗑️ Eliminar notificación
   const deleteNotification = async (id: string) => {
     try {
       await supabase
@@ -217,24 +197,22 @@ export default function NotificationsBell() {
     }
   }
 
-  // 🎨 Icono según tipo - ✅ ACTUALIZADO CON NUEVO PRESTAMO
   const getIcon = (type: string) => {
     switch (type) {
       case 'vencimiento': return '⏰'
       case 'nuevo_lead': return '🎯'
       case 'pago_recibido': return '💰'
-      case 'nuevo_prestamo': return '📄'  // ✅ Nuevo ícono para préstamos
+      case 'nuevo_prestamo': return '📄'
       default: return '🔔'
     }
   }
 
-  // 🎨 Color según tipo - ✅ ACTUALIZADO CON NUEVO PRESTAMO
   const getColor = (type: string) => {
     switch (type) {
       case 'vencimiento': return '#f87171'
       case 'nuevo_lead': return '#fbbf24'
       case 'pago_recibido': return '#34d399'
-      case 'nuevo_prestamo': return '#60a5fa'  // ✅ Azul para préstamos
+      case 'nuevo_prestamo': return '#60a5fa'
       default: return '#60a5fa'
     }
   }
