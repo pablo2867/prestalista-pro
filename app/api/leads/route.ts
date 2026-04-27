@@ -1,8 +1,11 @@
-// app/api/leads/route.ts
+// app/api/leads/route.ts - VERSIÓN FINAL CON DEBUGGING Y NOTIFICACIONES ROBUSTAS
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json({ success: true, leads: data||[], metrics }, { status: 200 })
   } catch(err:any){
+    console.error('❌ Error GET leads:', err)
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
   }
 }
@@ -31,44 +35,68 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    // Agregamos userId para saber a quién notificar
     const { nombre, apellido, telefono, email, origen, monto_interes, proposito, prioridad, notas, userId } = body
     
-    if(!nombre||!apellido||!telefono) return NextResponse.json({success:false,error:'Nombre, apellido y teléfono son obligatorios'},{status:400})
+    console.log('📝 [LEADS POST] Recibido:', { nombre, userId })
     
-    // 1. Insertar el Lead
-    const {data:inserted,error} = await supabase.from('leads').insert({
-      nombre:nombre.trim(), apellido:apellido.trim(), telefono:telefono.trim(),
-      email:email?.trim()?.toLowerCase()||null, origen:origen||'otro',
-      estado:'nuevo', monto_interes:monto_interes?parseFloat(monto_interes):null,
-      proposito:proposito?.trim()||null, prioridad:prioridad||'media', notas:notas?.trim()||null
+    // Validación
+    if(!nombre||!apellido||!telefono) {
+      console.warn('⚠️ Validación fallida:', { nombre, apellido, telefono })
+      return NextResponse.json({success:false,error:'Nombre, apellido y teléfono son obligatorios'},{status:400})
+    }
+    
+    // 1. Insertar el lead
+    const {data: inserted, error: insertError} = await supabase.from('leads').insert({
+      nombre:nombre.trim(), 
+      apellido:apellido.trim(), 
+      telefono:telefono.trim(),
+      email:email?.trim()?.toLowerCase()||null, 
+      origen:origen||'otro',
+      estado:'nuevo', 
+      monto_interes:monto_interes?parseFloat(monto_interes):null,
+      proposito:proposito?.trim()||null, 
+      prioridad:prioridad||'media', 
+      notas:notas?.trim()||null
     }).select().single()
     
-    if(error) return NextResponse.json({success:false,error:error.message},{status:500})
+    if(insertError) {
+      console.error('❌ Error insertando lead:', insertError)
+      return NextResponse.json({success:false,error:insertError.message},{status:500})
+    }
+    
+    console.log('✅ Lead creado:', inserted.id)
 
-    // ✅ NUEVO: Crear la notificación en la base de datos
-    // Esto hará que el componente NotificationsBell suene y muestre la alerta
-    if (inserted) {
-        const notifPayload: any = {
-            type: 'nuevo_lead',
-            title: '🎯 Nuevo Lead',
-            message: `Se registró: ${nombre} ${apellido}`,
-            data: { lead_id: inserted.id },
-            read: false
-        }
+    // 2. ✅ CREAR NOTIFICACIÓN (SOLO SI HAY userId VÁLIDO)
+    if (userId && inserted) {
+      try {
+        console.log('🔔 Intentando crear notificación para userId:', userId)
         
-        // Si el frontend envía el userId, lo asignamos. Si no, se guarda sin usuario (pero el registro se crea).
-        if (userId) {
-            notifPayload.user_id = userId
+        const { error: notifError } = await supabase.from('notifications').insert({
+          user_id: userId,  // ← Requerido por RLS y esquema
+          distribuidor_id: null,
+          type: 'nuevo_lead',
+          title: '🎯 Nuevo Lead',
+          message: `Se registró: ${nombre} ${apellido}`,
+           { lead_id: inserted.id },
+          read: false
+        })
+        
+        if (notifError) {
+          console.error('❌ Error creando notificación:', notifError)
+          // No fallamos la respuesta principal, pero logueamos el error
+        } else {
+          console.log('✅ Notificación creada exitosamente')
         }
-
-        // Usamos la misma conexión supabase (con Service Role) para insertar
-        const { error: notifError } = await supabase.from('notifications').insert(notifPayload)
-        if(notifError) console.error('Error creando notificación:', notifError)
+      } catch (notifErr: any) {
+        console.error('❌ Excepción en bloque de notificación:', notifErr)
+      }
+    } else {
+      console.warn('⚠️ No se creó notificación - userId:', userId, 'inserted:', !!inserted)
     }
 
     return NextResponse.json({success:true,data:inserted},{status:201})
   } catch(err:any){
+    console.error('❌ Error crítico POST leads:', err)
     return NextResponse.json({success:false,error:err.message},{status:500})
   }
 }
@@ -79,10 +107,11 @@ export async function PATCH(request: NextRequest) {
     if(!id) return NextResponse.json({success:false,error:'ID requerido'},{status:400})
     const updateData:any={estado}
     if(estado==='convertido'&&prestatario_id){updateData.prestatario_id=prestatario_id;updateData.fecha_conversion=new Date().toISOString().split('T')[0]}
-    const {data:updated,error}=await supabase.from('leads').update(updateData).eq('id',id).select().single()
+    const {updated,error}=await supabase.from('leads').update(updateData).eq('id',id).select().single()
     if(error) return NextResponse.json({success:false,error:error.message},{status:500})
     return NextResponse.json({success:true,data:updated},{status:200})
   } catch(err:any){
+    console.error('❌ Error PATCH leads:', err)
     return NextResponse.json({success:false,error:err.message},{status:500})
   }
 }

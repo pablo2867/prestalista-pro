@@ -1,4 +1,4 @@
-// app/api/prestamos/route.ts
+// app/api/prestamos/route.ts - VERSIÓN FINAL CON NOTIFICACIONES
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       metrics: { 
         total, 
         activos, 
-        vencidos: 0, // Se puede calcular con lógica de fechas
+        vencidos: 0,
         totalPrestado: Math.round(totalPrestado),
         totalPorCobrar: Math.round(totalPorCobrar)
       }
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ✅ POST: Registrar nuevo préstamo
+// ✅ POST: Registrar nuevo préstamo CON NOTIFICACIÓN
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -82,7 +82,8 @@ export async function POST(request: NextRequest) {
       plazo_meses, 
       cuota_inicial,
       notas,
-      garantia
+      garantia,
+      userId // ✅ Agregamos userId para la notificación
     } = body
 
     if (!prestatario_id || !monto_principal || !tasa_interes_mensual || !plazo_meses) {
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
     const plazo = parseInt(plazo_meses)
     const inicial = parseFloat(cuota_inicial) || 0
 
-    // Cálculos financieros
+    // Cálculos financieros (tu lógica original intacta)
     const interesTotal = monto * (tasa / 100) * plazo
     const montoTotal = monto + interesTotal
     const saldoDespuesInicial = montoTotal - inicial
@@ -133,6 +134,28 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error POST prestamo:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    // ✅ NUEVO: Crear notificación cuando se crea un préstamo
+    if (inserted && userId) {
+      try {
+        const { error: notifError } = await supabase.from('notifications').insert({
+          user_id: userId,
+          distribuidor_id: distribuidor_id || null,
+          type: 'nuevo_prestamo', // Tipo nuevo para préstamos
+          title: '📄 Nuevo Préstamo Creado',
+          message: `Préstamo de $${monto.toLocaleString('es-MX')} registrado exitosamente`,
+           { prestamo_id: inserted.id, prestatario_id },
+          read: false
+        })
+        
+        if (notifError) {
+          console.error('⚠️ Error creando notificación de préstamo:', notifError)
+          // No fallamos la respuesta principal si la notificación falla
+        }
+      } catch (notifErr) {
+        console.error('⚠️ Error en bloque de notificación:', notifErr)
+      }
     }
 
     return NextResponse.json({ success: true,  inserted }, { status: 201 })
