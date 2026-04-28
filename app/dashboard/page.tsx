@@ -1,4 +1,4 @@
-// app/dashboard/page.tsx - VERSIÓN FINAL CON NOTIFICACIONES
+// app/dashboard/page.tsx - VERSIÓN FINAL CON CLIENTE COMPARTIDO
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -6,14 +6,13 @@ import Link from 'next/link'
 import { useGlobalContext } from '../lib/GlobalContext'
 import { useAuth } from '../lib/AuthContext'
 import ProtectedRoute from '../lib/ProtectedRoute'
-import { createClient } from '@supabase/supabase-js'
+// ✅ IMPORTAR CLIENTE COMPARTIDO en lugar de crear uno nuevo
+import { supabase } from '../lib/supabaseClient'
 // 🔔 Import del componente de notificaciones
 import NotificationsBell from '../components/NotificationsBell'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// ❌ ELIMINADO: Ya no creamos un cliente nuevo aquí
+// const supabase = createClient(...)
 
 export default function DashboardPage() {
   const { user, signOut, isAdmin, isDistributor, isCollector } = useAuth()
