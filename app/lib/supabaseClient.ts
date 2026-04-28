@@ -1,18 +1,25 @@
-// app/lib/supabaseClient.ts
-import { createClient } from '@supabase/supabase-js'
+// app/lib/supabaseClient.ts - SINGLETON PARA EVITAR WARNING EN DEV
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// ✅ Singleton: solo se crea una instancia, incluso con hot reload
+let supabaseInstance: SupabaseClient | undefined
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('❌ Faltan variables de entorno de Supabase')
+export function getSupabase(): SupabaseClient {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+        }
+      }
+    )
+  }
+  return supabaseInstance
 }
 
-// ✅ Exportar una única instancia reutilizable
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
-  }
-})
+// ✅ Exportar la instancia única
+export const supabase = getSupabase()

@@ -1,4 +1,4 @@
-// app/api/leads/route.ts - VERSIÓN FINAL CON DEBUGGING Y NOTIFICACIONES ROBUSTAS
+// app/api/leads/route.ts - VERSIÓN CORREGIDA CON SINTAXIS VÁLIDA
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
     
     console.log('📝 [LEADS POST] Recibido:', { nombre, userId })
     
-    // Validación
     if(!nombre||!apellido||!telefono) {
       console.warn('⚠️ Validación fallida:', { nombre, apellido, telefono })
       return NextResponse.json({success:false,error:'Nombre, apellido y teléfono son obligatorios'},{status:400})
@@ -72,18 +71,17 @@ export async function POST(request: NextRequest) {
         console.log('🔔 Intentando crear notificación para userId:', userId)
         
         const { error: notifError } = await supabase.from('notifications').insert({
-          user_id: userId,  // ← Requerido por RLS y esquema
+          user_id: userId,
           distribuidor_id: null,
           type: 'nuevo_lead',
           title: '🎯 Nuevo Lead',
           message: `Se registró: ${nombre} ${apellido}`,
-           { lead_id: inserted.id },
+          data: { lead_id: inserted.id },  // ✅ CORREGIDO: Agregada la clave "data:"
           read: false
         })
         
         if (notifError) {
           console.error('❌ Error creando notificación:', notifError)
-          // No fallamos la respuesta principal, pero logueamos el error
         } else {
           console.log('✅ Notificación creada exitosamente')
         }
@@ -94,7 +92,7 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ No se creó notificación - userId:', userId, 'inserted:', !!inserted)
     }
 
-    return NextResponse.json({success:true,data:inserted},{status:201})
+    return NextResponse.json({success:true,inserted},{status:201})
   } catch(err:any){
     console.error('❌ Error crítico POST leads:', err)
     return NextResponse.json({success:false,error:err.message},{status:500})

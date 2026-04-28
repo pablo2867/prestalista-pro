@@ -1,13 +1,11 @@
-// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON CLIENTE COMPARTIDO
+// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON HOOK DE AUDIO BLINDADO
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-// ✅ IMPORTAR CLIENTE COMPARTIDO en lugar de crear uno nuevo
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
-
-// ❌ ELIMINADO: Ya no creamos un cliente nuevo aquí
-// const supabase = createClient(...)
+// ✅ IMPORTAR EL HOOK DE AUDIO BLINDADO
+import { useNotificationSound } from '../lib/useNotificationSound'
 
 interface Notification {
   id: string
@@ -27,7 +25,9 @@ export default function NotificationsBell() {
   const [loading, setLoading] = useState(true)
   
   const channelRef = useRef<any>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
+  
+  // ✅ USAR EL HOOK DE AUDIO BLINDADO (reemplaza audioRef y playNotificationSound)
+  const { play, vibrate } = useNotificationSound()
 
   useEffect(() => {
     if (user) {
@@ -38,42 +38,8 @@ export default function NotificationsBell() {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
-      }
     }
   }, [user])
-
-  const playNotificationSound = () => {
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
-      }
-      
-      const audioContext = audioContextRef.current
-      if (audioContext.state === 'suspended') {
-        audioContext.resume()
-      }
-      
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      oscillator.frequency.setValueAtTime(880, audioContext.currentTime)
-      oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.3)
-      oscillator.type = 'sine'
-      
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
-      
-      oscillator.start(audioContext.currentTime)
-      oscillator.stop(audioContext.currentTime + 0.5)
-    } catch (err) {
-      console.log('🔇 Audio no reproducido (permisos o contexto):', err)
-    }
-  }
 
   const fetchNotifications = async () => {
     try {
@@ -89,7 +55,7 @@ export default function NotificationsBell() {
         query = query.eq('distribuidor_id', user.id)
       }
 
-      const { data, error } = await query
+      const {  data, error } = await query
       if (error) throw error
       
       setNotifications(data || [])
@@ -114,11 +80,15 @@ export default function NotificationsBell() {
         },
         (payload) => {
           const newNotification = payload.new as Notification
-          playNotificationSound()
+          console.log('🔔 Nueva notificación recibida:', newNotification.title)
+          
+          // ✅ REPRODUCIR AUDIO Y VIBRACIÓN CON EL HOOK BLINDADO
+          play()
+          vibrate()
+          
           showToast(newNotification.title, newNotification.message)
           setNotifications(prev => [newNotification, ...prev])
           setUnreadCount(prev => prev + 1)
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100])
         }
       )
       .subscribe()
@@ -221,7 +191,6 @@ export default function NotificationsBell() {
 
   return (
     <>
-      {/* 🔔 Botón de campana */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -255,10 +224,8 @@ export default function NotificationsBell() {
         )}
       </button>
 
-      {/* 📋 Dropdown de notificaciones */}
       {isOpen && (
         <>
-          {/* Overlay para cerrar al hacer clic fuera */}
           <div
             onClick={() => setIsOpen(false)}
             style={{
@@ -271,7 +238,6 @@ export default function NotificationsBell() {
             }}
           />
           
-          {/* Panel de notificaciones */}
           <div style={{
             position: 'absolute',
             top: '50px',
@@ -285,7 +251,6 @@ export default function NotificationsBell() {
             zIndex: 1000,
             overflow: 'hidden'
           }}>
-            {/* Header */}
             <div style={{
               padding: '16px',
               borderBottom: '1px solid #1f2937',
@@ -317,7 +282,6 @@ export default function NotificationsBell() {
               )}
             </div>
 
-            {/* Lista */}
             <div style={{
               maxHeight: '400px',
               overflowY: 'auto',
