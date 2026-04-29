@@ -88,10 +88,16 @@ export default function PrestamosPage() {
 
     setFormLoading(true)
     try {
+      // ✅ CORREGIDO: Agregar userId al cuerpo de la petición para la notificación
+      const body = {
+        ...formData,
+        userId: user?.id  // ← CRÍTICO: Para que la API cree la notificación
+      }
+
       const res = await fetch('/api/prestamos', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(formData) 
+        body: JSON.stringify(body)  // ← Enviar body con userId incluido
       })
       const result = await res.json()
       if (result.success) { 
@@ -278,7 +284,7 @@ export default function PrestamosPage() {
             style={{ 
               display: 'none',
               position: 'fixed', 
-              top: '70px', // ⬅️ BAJADO PARA NO TAPAR LA BÚSQUEDA
+              top: '70px',
               left: '16px', 
               zIndex: 100, 
               padding: '10px 14px', 
