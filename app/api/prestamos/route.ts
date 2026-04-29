@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       query = query.eq('estado', estado)
     }
 
-    const { data, error } = await query
+    const {  data, error } = await query
 
     if (error) {
       console.error('Error GET prestamos:', error)
@@ -142,10 +142,10 @@ export async function POST(request: NextRequest) {
         const { error: notifError } = await supabase.from('notifications').insert({
           user_id: userId,
           distribuidor_id: distribuidor_id || null,
-          type: 'nuevo_prestamo', // Tipo nuevo para préstamos
+          type: 'nuevo_prestamo',
           title: '📄 Nuevo Préstamo Creado',
           message: `Préstamo de $${monto.toLocaleString('es-MX')} registrado exitosamente`,
-           { prestamo_id: inserted.id, prestatario_id },
+          data: { prestamo_id: inserted.id, prestatario_id },  // ✅ CORREGIDO: Agregada clave "data:"
           read: false
         })
         
