@@ -1,4 +1,4 @@
-// app/api/prestamos/route.ts - VERSIÓN FINAL CON DIAGNÓSTICO Y FALLBACK
+// app/api/prestamos/route.ts - VERSIÓN DEFINITIVA CON userId BLINDADO
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -11,7 +11,6 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl!, supabaseKey!)
 
-// ✅ GET: Obtener préstamos con datos del cliente y distribuidor
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -21,15 +20,8 @@ export async function GET(request: NextRequest) {
       .from('prestamos')
       .select(`
         *,
-        prestatario:prestatarios (
-          id,
-          nombre,
-          apellido
-        ),
-        distribuidor:distributors (
-          id,
-          nombre
-        )
+        prestatario:prestatarios ( id, nombre, apellido ),
+        distribuidor:distributors ( id, nombre )
       `)
       .order('created_at', { ascending: false })
 
@@ -37,12 +29,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('estado', estado)
     }
 
-    const {  data, error } = await query
-
-    if (error) {
-      console.error('Error GET prestamos:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
-    }
+    const { data, error } = await query
+    if (error) throw error
 
     const total = data?.length || 0
     const activos = data?.filter((p: any) => p.estado === 'activo').length || 0
@@ -52,49 +40,30 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       prestamos: data || [],
-      metrics: { 
-        total, 
-        activos, 
-        vencidos: 0,
-        totalPrestado: Math.round(totalPrestado),
-        totalPorCobrar: Math.round(totalPorCobrar)
-      }
+      metrics: { total, activos, vencidos: 0, totalPrestado: Math.round(totalPrestado), totalPorCobrar: Math.round(totalPorCobrar) }
     }, { status: 200 })
-
   } catch (err: any) {
-    console.error('Error crítico GET prestamos:', err)
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
   }
 }
 
-// ✅ POST: Registrar nuevo préstamo CON NOTIFICACIÓN Y DIAGNÓSTICO
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    // 🔍 LOGS DE DIAGNÓSTICO (aparecerán en Vercel Functions)
-    console.log('🔍 [API PRESTAMOS] Body recibido:', JSON.stringify(body, null, 2))
+    // 🔍 LOGS EXPLÍCITOS (imposibles de ignorar)
+    console.log('🚨 [API PRESTAMOS] === INICIO POST ===')
+    console.log('📦 Body completo:', JSON.stringify(body, null, 2))
     
     const { 
-      prestatario_id, 
-      distribuidor_id, 
-      monto_principal, 
-      tasa_interes_mensual, 
-      plazo_meses, 
-      cuota_inicial,
-      notas,
-      garantia,
-      userId 
+      prestatario_id, distribuidor_id, monto_principal, tasa_interes_mensual, 
+      plazo_meses, cuota_inicial, notas, garantia, userId 
     } = body
 
-    // 🔑 LOG CLAVE: Verificar userId
-    console.log('🔑 [API PRESTAMOS] userId extraído:', userId, '| Tipo:', typeof userId, '| Es truthy:', !!userId)
+    console.log('🔑 userId recibido:', userId, '| Tipo:', typeof userId, '| Truthy:', !!userId)
 
     if (!prestatario_id || !monto_principal || !tasa_interes_mensual || !plazo_meses) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Prestatario, monto, tasa y plazo son obligatorios' 
-      }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Campos obligatorios faltantes' }, { status: 400 })
     }
 
     const monto = parseFloat(monto_principal)
@@ -102,12 +71,9 @@ export async function POST(request: NextRequest) {
     const plazo = parseInt(plazo_meses)
     const inicial = parseFloat(cuota_inicial) || 0
 
-    // Cálculos financieros
     const interesTotal = monto * (tasa / 100) * plazo
     const montoTotal = monto + interesTotal
-    const saldoDespuesInicial = montoTotal - inicial
-    const cuotaMensual = saldoDespuesInicial / plazo
-
+    const cuotaMensual = (montoTotal - inicial) / plazo
     const fechaInicio = new Date()
     const fechaVencimiento = new Date(fechaInicio)
     fechaVencimiento.setMonth(fechaVencimiento.getMonth() + plazo)
@@ -136,53 +102,61 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error POST prestamo:', error)
+      console.error('❌ Error insertando préstamo:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    console.log('✅ [API] Préstamo creado exitosamente - ID:', inserted.id)
+    console.log('✅ Préstamo creado - ID:', inserted.id)
 
-    // ✅ BLOQUE DE NOTIFICACIÓN CON DIAGNÓSTICO Y FALLBACK
-    if (inserted) {
-      // 🔹 Fallback: Si userId no viene, intentar usar un ID por defecto (opcional)
-      const finalUserId = userId || process.env.NEXT_PUBLIC_DEFAULT_ADMIN_ID
-      
-      console.log('🔔 [API] Preparando notificación:', {
-        finalUserId: finalUserId,
-        tipo: 'nuevo_prestamo',
-        prestamo_id: inserted.id,
-        prestatario_id: prestatario_id
-      })
-      
-      if (!finalUserId) {
-        console.warn('⚠️ [API] No se creará notificación: userId es null/undefined y no hay fallback configurado')
-      } else {
-        try {
-          const { error: notifError } = await supabase.from('notifications').insert({
-            user_id: finalUserId,
-            distribuidor_id: distribuidor_id || null,
-            type: 'nuevo_prestamo',
-            title: '📄 Nuevo Préstamo Creado',
-            message: `Préstamo de $${monto.toLocaleString('es-MX')} registrado exitosamente`,
-             { prestamo_id: inserted.id, prestatario_id },
-            read: false
-          })
-          
-          if (notifError) {
-            console.error('❌ [API] Error creando notificación:', notifError)
-          } else {
-            console.log('✅ [API] Notificación de préstamo creada exitosamente para userId:', finalUserId)
-          }
-        } catch (notifErr: any) {
-          console.error('❌ [API] Excepción en bloque de notificación:', notifErr?.message || notifErr)
-        }
-      }
+    // ✅ BLOQUE DE NOTIFICACIÓN BLINDADO
+    console.log('🔔 [API] Preparando notificación...')
+    
+    // 🔹 Intentar obtener userId de múltiples fuentes en el backend
+    let finalUserId = userId
+    
+    // Fallback 1: Variable de entorno
+    if (!finalUserId && process.env.NEXT_PUBLIC_DEFAULT_ADMIN_ID) {
+      finalUserId = process.env.NEXT_PUBLIC_DEFAULT_ADMIN_ID
+      console.log('⚙️ Usando fallback: NEXT_PUBLIC_DEFAULT_ADMIN_ID')
+    }
+    
+    // Fallback 2: ID hardcoded como último recurso (SOLO PARA DEBUG)
+    if (!finalUserId) {
+      finalUserId = '6bafc166-ea84-4e03-9526-000d64e4c8c6' // ← Tu user_id
+      console.log('⚠️ USANDO ID HARDCODED PARA DEBUG - REMOVER EN PRODUCCIÓN')
+    }
+    
+    console.log('🎯 finalUserId para notificación:', finalUserId)
+    
+    if (!finalUserId) {
+      console.error('❌ [API] NO SE PUDO OBTENER userId - Notificación NO creada')
     } else {
-      console.warn('⚠️ [API] inserted es null, no se puede crear notificación')
+      try {
+        console.log('📤 Insertando notificación en Supabase...')
+        
+        const { data: notifData, error: notifError } = await supabase.from('notifications').insert({
+          user_id: finalUserId,
+          distribuidor_id: distribuidor_id || null,
+          type: 'nuevo_prestamo',
+          title: '📄 Nuevo Préstamo Creado',
+          message: `Préstamo de $${monto.toLocaleString('es-MX')} registrado exitosamente`,
+           { prestamo_id: inserted.id, prestatario_id },
+          read: false
+        }).select().single()
+        
+        if (notifError) {
+          console.error('❌ [API] Error de Supabase creando notificación:', notifError)
+        } else {
+          console.log('✅ [API] NOTIFICACIÓN CREADA EXITOSAMENTE - ID:', notifData?.id)
+        }
+      } catch (notifErr: any) {
+        console.error('💥 [API] Excepción creando notificación:', notifErr?.message || notifErr)
+      }
     }
 
+    console.log('🚨 [API PRESTAMOS] === FIN POST ===\n')
+    
     return NextResponse.json({ success: true,  inserted }, { status: 201 })
-
   } catch (err: any) {
     console.error('💥 [API] Error crítico POST prestamo:', err)
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })

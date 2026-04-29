@@ -1,10 +1,9 @@
-// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON HOOK DE AUDIO BLINDADO
+// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON AUDIO ROBUSTO
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../lib/AuthContext'
-// ✅ IMPORTAR EL HOOK DE AUDIO BLINDADO
 import { useNotificationSound } from '../lib/useNotificationSound'
 
 interface Notification {
@@ -26,8 +25,8 @@ export default function NotificationsBell() {
   
   const channelRef = useRef<any>(null)
   
-  // ✅ USAR EL HOOK DE AUDIO BLINDADO (reemplaza audioRef y playNotificationSound)
-  const { play, vibrate } = useNotificationSound()
+  // ✅ Hook de audio blindado
+  const { play, vibrate, unlocked } = useNotificationSound()
 
   useEffect(() => {
     if (user) {
@@ -68,8 +67,10 @@ export default function NotificationsBell() {
   }
 
   const setupRealtimeSubscription = () => {
+    console.log('🔧 [Bell] Configurando suscripción para user_id:', user?.id)
+    
     channelRef.current = supabase
-      .channel('notifications_changes')
+      .channel(`notifications_${user?.id}`)
       .on(
         'postgres_changes',
         {
@@ -78,24 +79,39 @@ export default function NotificationsBell() {
           table: 'notifications',
           filter: `user_id=eq.${user?.id}`
         },
-        (payload) => {
+        async (payload) => {
+          console.log('🔔 [Bell] ¡EVENTO RECIBIDO!', payload.new)
           const newNotification = payload.new as Notification
-          console.log('🔔 Nueva notificación recibida:', newNotification.title)
           
-          // ✅ REPRODUCIR AUDIO Y VIBRACIÓN CON EL HOOK BLINDADO
+          // ✅ CRÍTICO: Reproducir audio/vibración INMEDIATAMENTE
+          console.log('🔊 [Bell] Audio unlocked:', unlocked, '- Llamando a play()')
           play()
+          
+          console.log('📳 [Bell] Llamando a vibrate()')
           vibrate()
           
+          // Mostrar toast visual
           showToast(newNotification.title, newNotification.message)
+          
+          // Actualizar estado
           setNotifications(prev => [newNotification, ...prev])
           setUnreadCount(prev => prev + 1)
+          
+          console.log('✅ [Bell] Notificación procesada')
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 [Bell] Estado de suscripción:', status)
+      })
   }
 
   const showToast = (title: string, message: string) => {
+    // Eliminar toasts anteriores para evitar acumulación
+    const existing = document.querySelector('[data-notification-toast]')
+    if (existing) existing.remove()
+    
     const toast = document.createElement('div')
+    toast.setAttribute('data-notification-toast', 'true')
     toast.style.cssText = `
       position: fixed;
       top: 20px;
@@ -109,6 +125,7 @@ export default function NotificationsBell() {
       max-width: 320px;
       animation: slideIn 0.3s ease;
       font-family: system-ui;
+      cursor: pointer;
     `
     toast.innerHTML = `
       <div style="display: flex; gap: 12px; align-items: flex-start;">
@@ -117,7 +134,7 @@ export default function NotificationsBell() {
           <div style="font-weight: 600; margin-bottom: 4px;">${title}</div>
           <div style="font-size: 14px; opacity: 0.9;">${message}</div>
         </div>
-        <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0 4px;">&times;</button>
+        <button onclick="this.closest('[data-notification-toast]').remove()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; padding: 0 4px;">&times;</button>
       </div>
       <style>
         @keyframes slideIn {
@@ -127,11 +144,17 @@ export default function NotificationsBell() {
       </style>
     `
     
+    // Cerrar al hacer clic en el toast
+    toast.onclick = () => toast.remove()
+    
     document.body.appendChild(toast)
     
+    // Auto-eliminar después de 5 segundos
     setTimeout(() => {
-      toast.style.animation = 'slideIn 0.3s ease reverse'
-      setTimeout(() => toast.remove(), 300)
+      if (toast.parentNode) {
+        toast.style.animation = 'slideIn 0.3s ease reverse'
+        setTimeout(() => toast.remove(), 300)
+      }
     }, 5000)
   }
 
@@ -203,6 +226,7 @@ export default function NotificationsBell() {
           fontSize: '20px',
           color: 'white'
         }}
+        aria-label="Notificaciones"
       >
         🔔
         {unreadCount > 0 && (

@@ -1,4 +1,4 @@
-// app/prestamos/page.tsx - VERSIÓN FINAL CON VALIDACIÓN DE userId
+// app/prestamos/page.tsx - VERSIÓN DEFINITIVA CON userId BLINDADO
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -74,6 +74,36 @@ export default function PrestamosPage() {
     } else { setCalculo({ montoTotal: 0, cuotaMensual: 0, interesTotal: 0 }) }
   }, [formData.monto_principal, formData.tasa_interes_mensual, formData.plazo_meses, formData.cuota_inicial])
 
+  // ✅ FUNCIÓN PARA OBTENER userId DESDE MÚLTIPLES FUENTES
+  const getUserId = (): string | null => {
+    // Fuente 1: useAuth hook
+    if (user?.id) return user.id
+    
+    // Fuente 2: localStorage (token de Supabase)
+    try {
+      const token = localStorage.getItem('sb-dbnqkvcsdeluekfyxqcu-auth-token')
+      if (token) {
+        const payload = JSON.parse(decodeURIComponent(escape(window.atob(token.split('.')[1]))))
+        if (payload?.sub) return payload.sub
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudo parsear token de localStorage')
+    }
+    
+    // Fuente 3: sessionStorage como último recurso
+    try {
+      const session = sessionStorage.getItem('sb-dbnqkvcsdeluekfyxqcu-auth-token')
+      if (session) {
+        const payload = JSON.parse(decodeURIComponent(escape(window.atob(session.split('.')[1]))))
+        if (payload?.sub) return payload.sub
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudo parsear token de sessionStorage')
+    }
+    
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -87,27 +117,23 @@ export default function PrestamosPage() {
     if (isNaN(plazo) || plazo <= 0) return alert('📅 El plazo debe ser mayor a 0')
     const inicial = parseFloat(formData.cuota_inicial) || 0
     if (inicial > monto) return alert('⚠️ La cuota inicial no puede ser mayor al monto')
+
+    // ✅ OBTENER userId BLINDADO
+    const userId = getUserId()
+    console.log('🔑 [Frontend] userId obtenido:', userId, '| Fuentes revisadas: useAuth, localStorage, sessionStorage')
     
-    // ✅ VALIDACIÓN CRÍTICA: Verificar que user?.id existe antes de enviar
-    if (!user?.id) {
-      console.error('❌ [Prestamos] userId no disponible - user:', user)
-      return alert('⚠️ Sesión no válida. Por favor inicia sesión nuevamente.')
+    if (!userId) {
+      console.error('❌ [Frontend] NO se pudo obtener userId de ninguna fuente')
+      return alert('⚠️ Error de sesión. Por favor recarga la página e intenta nuevamente.')
     }
 
     setFormLoading(true)
     try {
-      // ✅ LOG DE DIAGNÓSTICO (aparece en consola del navegador)
-      console.log('📤 [Prestamos] Enviando a API:', {
-        formDataKeys: Object.keys(formData),
-        userId: user?.id,
-        userIdType: typeof user?.id,
-        timestamp: new Date().toISOString()
-      })
+      console.log('📤 [Frontend] Enviando préstamo con userId:', userId)
 
-      // ✅ CUERPO DE LA PETICIÓN CON userId GARANTIZADO
       const body = {
         ...formData,
-        userId: user?.id  // ← Ahora sabemos que existe por la validación anterior
+        userId: userId  // ← Ahora garantizado desde múltiples fuentes
       }
 
       const res = await fetch('/api/prestamos', { 
@@ -117,13 +143,7 @@ export default function PrestamosPage() {
       })
       
       const result = await res.json()
-      
-      // ✅ LOG DE RESPUESTA
-      console.log('📥 [Prestamos] Respuesta API:', {
-        success: result.success,
-        error: result.error,
-        insertedId: result.inserted?.id
-      })
+      console.log('📥 [Frontend] Respuesta:', result)
       
       if (result.success) { 
         alert('✅ Préstamo registrado')
@@ -133,7 +153,7 @@ export default function PrestamosPage() {
         alert('❌ ' + result.error) 
       }
     } catch (err: any) { 
-      console.error('❌ [Prestamos] Error:', err)
+      console.error('❌ [Frontend] Error:', err)
       alert('Error: ' + err.message) 
     } finally { 
       setFormLoading(false) 
@@ -229,42 +249,18 @@ export default function PrestamosPage() {
         {/* 📱 CSS Responsive */}
         <style>{`
           @media (max-width: 768px) {
-            .sidebar { 
-              transform: translateX(-100%) !important; 
-              transition: transform 0.3s ease; 
-            }
-            .sidebar.open { 
-              transform: translateX(0) !important; 
-            }
-            .main { 
-              margin-left: 0 !important; 
-              padding: 16px !important; 
-            }
-            .grid-form { 
-              grid-template-columns: 1fr !important; 
-            }
-            .grid-stats { 
-              grid-template-columns: 1fr 1fr !important; 
-              gap: 12px !important; 
-            }
-            .header-content { 
-              flex-direction: column !important; 
-              align-items: flex-start !important; 
-            }
-            .mobile-menu-btn { 
-              display: flex !important; 
-            }
-            .overlay { 
-              display: block !important; 
-            }
+            .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
+            .sidebar.open { transform: translateX(0) !important; }
+            .main { margin-left: 0 !important; padding: 16px !important; }
+            .grid-form { grid-template-columns: 1fr !important; }
+            .grid-stats { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+            .header-content { flex-direction: column !important; align-items: flex-start !important; }
+            .mobile-menu-btn { display: flex !important; }
+            .overlay { display: block !important; }
           }
           @media (min-width: 769px) {
-            .overlay { 
-              display: none !important; 
-            }
-            .mobile-menu-btn { 
-              display: none !important; 
-            }
+            .overlay { display: none !important; }
+            .mobile-menu-btn { display: none !important; }
           }
           @media print { 
             aside, .no-print, .overlay { display: none !important; } 
@@ -309,7 +305,7 @@ export default function PrestamosPage() {
         {/* Main Content */}
         <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
           
-          {/* 🔴 BOTÓN HAMBURGUESA - POSICIÓN CORREGIDA (top: 70px) */}
+          {/* 🔴 BOTÓN HAMBURGUESA */}
           <button 
             className="mobile-menu-btn" 
             onClick={() => setSidebarOpen(true)} 

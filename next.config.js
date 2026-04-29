@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false, // ✅ Cambiado a false para evitar conflictos con Supabase
   typescript: {
     ignoreBuildErrors: true,
   },
