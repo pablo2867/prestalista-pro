@@ -1,4 +1,4 @@
-// app/components/SearchBar.tsx - VERSIÓN DEBUG
+// app/components/SearchBar.tsx - VERSIÓN PRODUCCIÓN (sin console spam)
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -12,36 +12,47 @@ export default function SearchBar() {
   const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
 
-  console.log('🔍 [SearchBar] Render:', { query, results, showDropdown })
+  // ✅ ELIMINADO: console.log de render que causaba spam
+  // console.log('🔍 [SearchBar] Render:', { query, results, showDropdown })
 
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (query.length >= 2) {
-        console.log('🔍 [SearchBar] Buscando:', query)
+        // ✅ Logs solo en desarrollo (opcional, comentar en producción)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 [SearchBar] Buscando:', query)
+        }
+        
         setLoading(true)
         setShowDropdown(true)
         try {
-          // 🔹 Usar URL absoluta con el puerto actual para evitar errores
           const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
           const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`
           const url = `${baseUrl}/api/search?q=${encodeURIComponent(query)}`
           
-          console.log('🌐 [SearchBar] Fetch URL:', url)
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🌐 [SearchBar] Fetch URL:', url)
+          }
           
           const res = await fetch(url)
-          console.log('📡 [SearchBar] Response status:', res.status)
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('📡 [SearchBar] Response status:', res.status)
+          }
           
           const data = await res.json()
-          console.log('📦 [SearchBar] Response data:', data)
           
           if (data.success) {
             setResults(data.results)
-            console.log('✅ [SearchBar] Resultados guardados:', data.results)
           } else {
-            console.error('❌ [SearchBar] API error:', data.error)
+            if (process.env.NODE_ENV === 'development') {
+              console.error('❌ [SearchBar] API error:', data.error)
+            }
           }
         } catch (err: any) {
-          console.error('❌ [SearchBar] Fetch error:', err)
+          if (process.env.NODE_ENV === 'development') {
+            console.error('❌ [SearchBar] Fetch error:', err)
+          }
           setResults({ error: err.message })
         } finally {
           setLoading(false)
@@ -66,7 +77,6 @@ export default function SearchBar() {
   }, [])
 
   const handleResultClick = (type: string) => {
-    console.log('🖱️ [SearchBar] Click en:', type)
     setShowDropdown(false)
     setQuery('')
     
@@ -123,23 +133,17 @@ export default function SearchBar() {
 
   return (
     <div ref={containerRef} style={s.container}>
-      {/* 🔍 Input SIEMPRE visible con borde azul para confirmar que está activo */}
       <input
         type="text"
         placeholder="🔍 Buscar..."
         value={query}
-        onChange={(e) => {
-          console.log('⌨️ [SearchBar] Input change:', e.target.value)
-          setQuery(e.target.value)
-        }}
+        onChange={(e) => setQuery(e.target.value)}
         onFocus={() => {
-          console.log('🎯 [SearchBar] Input focus')
           if (query.length >= 2) setShowDropdown(true)
         }}
         style={s.input}
       />
 
-      {/* 📋 Dropdown con resultados */}
       {showDropdown && query.length >= 2 && (
         <div style={s.dropdown}>
           {loading && <div style={{ padding: '16px', color: '#9ca3af' }}>⏳ Buscando...</div>}
@@ -156,10 +160,7 @@ export default function SearchBar() {
                     <div
                       key={p.id}
                       style={s.item}
-                      onClick={() => {
-                        console.log('✅ [SearchBar] Seleccionado cliente:', p.nombre)
-                        handleResultClick('prestatarios')
-                      }}
+                      onClick={() => handleResultClick('prestatarios')}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
@@ -191,6 +192,54 @@ export default function SearchBar() {
                       <div>
                         <div style={{ fontWeight: '600' }}>{p.prestatario?.nombre} {p.prestatario?.apellido}</div>
                         <div style={{ fontSize: '12px', color: '#9ca3af' }}>${Number(p.monto_principal || 0).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* 🎯 Leads */}
+              {results.leads?.length > 0 && (
+                <>
+                  <div style={{ padding: '8px 16px', fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+                    LEADS ({results.leads.length})
+                  </div>
+                  {results.leads.map((l: any) => (
+                    <div
+                      key={l.id}
+                      style={s.item}
+                      onClick={() => handleResultClick('leads')}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      <span>🎯</span>
+                      <div>
+                        <div style={{ fontWeight: '600' }}>{l.nombre} {l.apellido}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{l.origen || 'Sin origen'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* 💵 Pagos */}
+              {results.pagos?.length > 0 && (
+                <>
+                  <div style={{ padding: '8px 16px', fontSize: '11px', color: '#6b7280', fontWeight: '600' }}>
+                    PAGOS ({results.pagos.length})
+                  </div>
+                  {results.pagos.map((p: any) => (
+                    <div
+                      key={p.id}
+                      style={s.item}
+                      onClick={() => handleResultClick('pagos')}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      <span>💵</span>
+                      <div>
+                        <div style={{ fontWeight: '600' }}>${Number(p.monto || 0).toLocaleString()}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{new Date(p.fecha_pago).toLocaleDateString('es-MX')}</div>
                       </div>
                     </div>
                   ))}
