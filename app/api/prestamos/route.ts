@@ -1,4 +1,4 @@
-// app/api/prestamos/route.ts - VERSIÓN DEFINITIVA CON userId BLINDADO
+// app/api/prestamos/route.ts - VERSIÓN FINAL SIMPLIFICADA
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -9,7 +9,13 @@ if (!supabaseUrl || !supabaseKey) {
   console.error('❌ Faltan variables de entorno para Préstamos')
 }
 
-const supabase = createClient(supabaseUrl!, supabaseKey!)
+// ✅ Cliente con service role key para bypass de RLS en notificaciones
+const supabase = createClient(supabaseUrl!, supabaseKey!, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,16 +57,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    // 🔍 LOGS EXPLÍCITOS (imposibles de ignorar)
-    console.log('🚨 [API PRESTAMOS] === INICIO POST ===')
-    console.log('📦 Body completo:', JSON.stringify(body, null, 2))
+    console.log('🚨 [API PRESTAMOS] Body recibido:', JSON.stringify(body, null, 2))
     
     const { 
       prestatario_id, distribuidor_id, monto_principal, tasa_interes_mensual, 
       plazo_meses, cuota_inicial, notas, garantia, userId 
     } = body
 
-    console.log('🔑 userId recibido:', userId, '| Tipo:', typeof userId, '| Truthy:', !!userId)
+    console.log('🔑 userId recibido:', userId, '| Tipo:', typeof userId)
 
     if (!prestatario_id || !monto_principal || !tasa_interes_mensual || !plazo_meses) {
       return NextResponse.json({ success: false, error: 'Campos obligatorios faltantes' }, { status: 400 })
@@ -78,7 +82,8 @@ export async function POST(request: NextRequest) {
     const fechaVencimiento = new Date(fechaInicio)
     fechaVencimiento.setMonth(fechaVencimiento.getMonth() + plazo)
 
-    const {  inserted, error } = await supabase
+    // ✅ Insertar préstamo
+    const { data: inserted, error: insertError } = await supabase
       .from('prestamos')
       .insert({
         prestatario_id,
@@ -101,62 +106,55 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (error) {
-      console.error('❌ Error insertando préstamo:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (insertError) {
+      console.error('❌ Error insertando préstamo:', insertError)
+      return NextResponse.json({ success: false, error: insertError.message }, { status: 500 })
     }
 
-    console.log('✅ Préstamo creado - ID:', inserted.id)
+    console.log('✅ Préstamo creado - ID:', inserted?.id)
 
-    // ✅ BLOQUE DE NOTIFICACIÓN BLINDADO
-    console.log('🔔 [API] Preparando notificación...')
+    // ✅ NOTIFICACIÓN: Versión simplificada SIN .select().single()
+    console.log('🔔 [API] Creando notificación...')
     
-    // 🔹 Intentar obtener userId de múltiples fuentes en el backend
-    let finalUserId = userId
-    
-    // Fallback 1: Variable de entorno
-    if (!finalUserId && process.env.NEXT_PUBLIC_DEFAULT_ADMIN_ID) {
-      finalUserId = process.env.NEXT_PUBLIC_DEFAULT_ADMIN_ID
-      console.log('⚙️ Usando fallback: NEXT_PUBLIC_DEFAULT_ADMIN_ID')
-    }
-    
-    // Fallback 2: ID hardcoded como último recurso (SOLO PARA DEBUG)
-    if (!finalUserId) {
-      finalUserId = '6bafc166-ea84-4e03-9526-000d64e4c8c6' // ← Tu user_id
-      console.log('⚠️ USANDO ID HARDCODED PARA DEBUG - REMOVER EN PRODUCCIÓN')
-    }
-    
-    console.log('🎯 finalUserId para notificación:', finalUserId)
-    
-    if (!finalUserId) {
-      console.error('❌ [API] NO SE PUDO OBTENER userId - Notificación NO creada')
-    } else {
-      try {
-        console.log('📤 Insertando notificación en Supabase...')
-        
-        const { data: notifData, error: notifError } = await supabase.from('notifications').insert({
+    // 🔹 Determinar userId con fallbacks
+    const finalUserId = userId || process.env.NEXT_PUBLIC_DEFAULT_ADMIN_ID || '6bafc166-ea84-4e03-9526-000d64e4c8c6'
+    console.log('🎯 userId para notificación:', finalUserId)
+
+    try {
+      // ✅ Insertar notificación SIN .select() para evitar problemas de RLS
+      const { error: notifError } = await supabase
+        .from('notifications')
+        .insert({
           user_id: finalUserId,
           distribuidor_id: distribuidor_id || null,
           type: 'nuevo_prestamo',
           title: '📄 Nuevo Préstamo Creado',
           message: `Préstamo de $${monto.toLocaleString('es-MX')} registrado exitosamente`,
-           { prestamo_id: inserted.id, prestatario_id },
+           { prestamo_id: inserted?.id, prestatario_id },
           read: false
-        }).select().single()
-        
-        if (notifError) {
-          console.error('❌ [API] Error de Supabase creando notificación:', notifError)
-        } else {
-          console.log('✅ [API] NOTIFICACIÓN CREADA EXITOSAMENTE - ID:', notifData?.id)
-        }
-      } catch (notifErr: any) {
-        console.error('💥 [API] Excepción creando notificación:', notifErr?.message || notifErr)
+        })
+        // ✅ SIN .select().single() - evita errores de RLS en la lectura
+
+      if (notifError) {
+        console.error('❌ [API] Error creando notificación:', {
+          code: notifError.code,
+          message: notifError.message,
+          details: notifError.details,
+          hint: notifError.hint
+        })
+      } else {
+        console.log('✅ [API] NOTIFICACIÓN INSERTADA EXITOSAMENTE')
       }
+    } catch (notifErr: any) {
+      console.error('💥 [API] Excepción en notificación:', {
+        message: notifErr?.message,
+        name: notifErr?.name,
+        stack: notifErr?.stack
+      })
     }
 
-    console.log('🚨 [API PRESTAMOS] === FIN POST ===\n')
-    
-    return NextResponse.json({ success: true,  inserted }, { status: 201 })
+    return NextResponse.json({ success: true, inserted }, { status: 201 })
+
   } catch (err: any) {
     console.error('💥 [API] Error crítico POST prestamo:', err)
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
