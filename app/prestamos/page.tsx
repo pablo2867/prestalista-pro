@@ -1,4 +1,4 @@
-// app/prestamos/page.tsx - VERSIÓN DEFINITIVA CON userId BLINDADO
+// app/prestamos/page.tsx - VERSIÓN PROFESIONAL CON PAGINACIÓN Y BÚSQUEDA
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -13,7 +13,13 @@ export default function PrestamosPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [prestamos, setPrestamos] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ total: 0, activos: 0, totalPrestado: 0, totalPorCobrar: 0 })
+  
+  // ✅ NUEVOS ESTADOS PARA BÚSQUEDA Y PAGINACIÓN
+  const [searchTerm, setSearchTerm] = useState('')
   const [filterEstado, setFilterEstado] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
+  
   const [prestatarios, setPrestatarios] = useState<any[]>([])
   const [distribuidores, setDistribuidores] = useState<any[]>([])
   
@@ -32,7 +38,7 @@ export default function PrestamosPage() {
 
   const { triggerPrestamosUpdate, triggerMovimientosUpdate } = useGlobalContext()
 
-  useEffect(() => { loadData(); loadPrestatarios(); loadDistribuidores() }, [filterEstado])
+  useEffect(() => { loadData(); loadPrestatarios(); loadDistribuidores() }, [])
 
   const loadData = async () => {
     try {
@@ -74,40 +80,28 @@ export default function PrestamosPage() {
     } else { setCalculo({ montoTotal: 0, cuotaMensual: 0, interesTotal: 0 }) }
   }, [formData.monto_principal, formData.tasa_interes_mensual, formData.plazo_meses, formData.cuota_inicial])
 
-  // ✅ FUNCIÓN PARA OBTENER userId DESDE MÚLTIPLES FUENTES
+  // ✅ FUNCIÓN PARA OBTENER userId DESDE MÚLTIPLES FUENTES (MANTENIDA)
   const getUserId = (): string | null => {
-    // Fuente 1: useAuth hook
     if (user?.id) return user.id
-    
-    // Fuente 2: localStorage (token de Supabase)
     try {
       const token = localStorage.getItem('sb-dbnqkvcsdeluekfyxqcu-auth-token')
       if (token) {
         const payload = JSON.parse(decodeURIComponent(escape(window.atob(token.split('.')[1]))))
         if (payload?.sub) return payload.sub
       }
-    } catch (e) {
-      console.warn('⚠️ No se pudo parsear token de localStorage')
-    }
-    
-    // Fuente 3: sessionStorage como último recurso
+    } catch (e) { console.warn('⚠️ No se pudo parsear token de localStorage') }
     try {
       const session = sessionStorage.getItem('sb-dbnqkvcsdeluekfyxqcu-auth-token')
       if (session) {
         const payload = JSON.parse(decodeURIComponent(escape(window.atob(session.split('.')[1]))))
         if (payload?.sub) return payload.sub
       }
-    } catch (e) {
-      console.warn('⚠️ No se pudo parsear token de sessionStorage')
-    }
-    
+    } catch (e) { console.warn('⚠️ No se pudo parsear token de sessionStorage') }
     return null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // ✅ VALIDACIONES
     if (!formData.prestatario_id) return alert('👤 Selecciona un prestatario')
     const monto = parseFloat(formData.monto_principal)
     if (isNaN(monto) || monto <= 0) return alert('💰 El monto debe ser mayor a 0')
@@ -118,46 +112,24 @@ export default function PrestamosPage() {
     const inicial = parseFloat(formData.cuota_inicial) || 0
     if (inicial > monto) return alert('⚠️ La cuota inicial no puede ser mayor al monto')
 
-    // ✅ OBTENER userId BLINDADO
     const userId = getUserId()
-    console.log('🔑 [Frontend] userId obtenido:', userId, '| Fuentes revisadas: useAuth, localStorage, sessionStorage')
-    
-    if (!userId) {
-      console.error('❌ [Frontend] NO se pudo obtener userId de ninguna fuente')
-      return alert('⚠️ Error de sesión. Por favor recarga la página e intenta nuevamente.')
-    }
+    if (!userId) return alert('⚠️ Error de sesión')
 
     setFormLoading(true)
     try {
-      console.log('📤 [Frontend] Enviando préstamo con userId:', userId)
-
-      const body = {
-        ...formData,
-        userId: userId  // ← Ahora garantizado desde múltiples fuentes
-      }
-
+      const body = { ...formData, userId }
       const res = await fetch('/api/prestamos', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(body)
       })
-      
       const result = await res.json()
-      console.log('📥 [Frontend] Respuesta:', result)
-      
       if (result.success) { 
         alert('✅ Préstamo registrado')
         setFormData({ prestatario_id: '', distribuidor_id: '', monto_principal: '', tasa_interes_mensual: '10', plazo_meses: '6', cuota_inicial: '0', notas: '', garantia: '' })
         loadData() 
-      } else { 
-        alert('❌ ' + result.error) 
-      }
-    } catch (err: any) { 
-      console.error('❌ [Frontend] Error:', err)
-      alert('Error: ' + err.message) 
-    } finally { 
-      setFormLoading(false) 
-    }
+      } else { alert('❌ ' + result.error) }
+    } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
   }
 
   const handleRegistrarPago = (prestamo: any) => {
@@ -198,7 +170,7 @@ export default function PrestamosPage() {
   const exportarPrestamos = () => {
     const BOM = '\uFEFF'
     const headers = 'Cliente;Fecha Inicio;Monto Principal;Monto Total;Cuota Mensual;Saldo Pendiente;Estado;Vencimiento'
-    const rows = prestamos.map((p: any) => [
+    const rows = prestamosFiltrados.map((p: any) => [
       `${p.prestatario?.nombre || ''} ${p.prestatario?.apellido || ''}`,
       new Date(p.fecha_inicio).toLocaleDateString('es-MX'),
       Number(p.monto_principal).toFixed(2),
@@ -240,6 +212,21 @@ export default function PrestamosPage() {
     return <span style={{ padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '600', ...styles[estado] }}>{estado.toUpperCase()}</span>
   }
 
+  // ✅ FILTRAR Y BUSCAR PRÉSTAMOS
+  const prestamosFiltrados = prestamos.filter((p) => {
+    const matchSearch = 
+      p.prestatario?.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.prestatario?.apellido?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchEstado = filterEstado ? p.estado === filterEstado : true
+    return matchSearch && matchEstado
+  })
+
+  // ✅ PAGINACIÓN
+  const totalPages = Math.ceil(prestamosFiltrados.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const prestamosPage = prestamosFiltrados.slice(startIndex, endIndex)
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>⏳ Cargando...</div>
 
   return (
@@ -270,7 +257,6 @@ export default function PrestamosPage() {
           }
         `}</style>
 
-        {/* Overlay para cerrar sidebar en móvil */}
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
 
         {/* Sidebar */}
@@ -305,7 +291,6 @@ export default function PrestamosPage() {
         {/* Main Content */}
         <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
           
-          {/* 🔴 BOTÓN HAMBURGUESA */}
           <button 
             className="mobile-menu-btn" 
             onClick={() => setSidebarOpen(true)} 
@@ -375,14 +360,64 @@ export default function PrestamosPage() {
             </form>
           </div>
 
+          {/* ✅ NUEVA SECCIÓN: BÚSQUEDA Y FILTROS MEJORADOS */}
+          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>🔍 Buscar por cliente</label>
+                <input
+                  type="text"
+                  placeholder="Nombre o apellido..."
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }}
+                  style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 14 }}
+                />
+              </div>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>📊 Filtrar por estado</label>
+                <select
+                  value={filterEstado}
+                  onChange={(e) => { setFilterEstado(e.target.value); setCurrentPage(1) }}
+                  style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 14 }}
+                >
+                  <option value="">Todos los estados</option>
+                  <option value="activo">✅ Activos</option>
+                  <option value="pagado">✅ Pagados</option>
+                  <option value="vencido">⚠️ Vencidos</option>
+                  <option value="cancelado">❌ Cancelados</option>
+                </select>
+              </div>
+              {(searchTerm || filterEstado) && (
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    onClick={() => { setSearchTerm(''); setFilterEstado(''); setCurrentPage(1) }}
+                    style={{ padding: '12px 24px', backgroundColor: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    🔄 Limpiar filtros
+                  </button>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#030712', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#9ca3af', fontSize: 14 }}>
+                Mostrando {prestamosPage.length} de {prestamosFiltrados.length} préstamos
+                {prestamosFiltrados.length !== prestamos.length && ` (de ${prestamos.length} totales)`}
+              </span>
+              {totalPages > 1 && (
+                <span style={{ color: '#60a5fa', fontSize: 14, fontWeight: 600 }}>
+                  Página {currentPage} de {totalPages}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Lista de Préstamos */}
           <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24 }}>
             <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>Préstamos Registrados</h2>
-            <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)} style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16, marginBottom: 24 }}><option value="">Todos</option><option value="activo">✅ Activos</option><option value="pagado">✅ Pagados</option><option value="vencido">⚠ Vencidos</option></select>
             
-            {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>⏳ Cargando...</div> : prestamos.length === 0 ? <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>📋 Sin préstamos</div> : (
+            {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>⏳ Cargando...</div> : prestamosPage.length === 0 ? <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>📋 Sin préstamos {searchTerm || filterEstado ? 'que coincidan con los filtros' : ''}</div> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {prestamos.map((p: any) => (
+                {prestamosPage.map((p: any) => (
                   <div key={p.id} style={{ backgroundColor: '#0b0f19', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -400,6 +435,66 @@ export default function PrestamosPage() {
                     {p.estado === 'activo' && <button onClick={() => handleRegistrarPago(p)} style={{ marginTop: 16, width: '100%', padding: '14px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 16, fontWeight: 600 }}>💵 Registrar Pago</button>}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* ✅ PAGINACIÓN */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #1f2937' }}>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  style={{ 
+                    padding: '10px 20px', 
+                    backgroundColor: currentPage === 1 ? '#374151' : '#3b82f6', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '8px', 
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    opacity: currentPage === 1 ? 0.5 : 1,
+                    fontWeight: 600
+                  }}
+                >
+                  ← Anterior
+                </button>
+                
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      style={{
+                        padding: '10px 16px',
+                        backgroundColor: currentPage === page ? '#3b82f6' : '#1f2937',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: currentPage === page ? 600 : 400,
+                        minWidth: '40px'
+                      }}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  style={{ 
+                    padding: '10px 20px', 
+                    backgroundColor: currentPage >= totalPages ? '#374151' : '#3b82f6', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '8px', 
+                    cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                    opacity: currentPage >= totalPages ? 0.5 : 1,
+                    fontWeight: 600
+                  }}
+                >
+                  Siguiente →
+                </button>
               </div>
             )}
           </div>
