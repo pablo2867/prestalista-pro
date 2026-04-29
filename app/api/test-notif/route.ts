@@ -1,7 +1,16 @@
-// app/api/test-notif/route.ts - ENDPOINT DE PRUEBA (CORREGIDO)
+// app/api/test-notif/route.ts - VERSIÓN CON GET Y POST
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// ✅ GET: Para probar desde el navegador
+export async function GET() {
+  return NextResponse.json({ 
+    message: '✅ Endpoint activo. Usa POST para crear la notificación de prueba.',
+    instructions: 'Ejecuta: curl -X POST https://prestalista-pro.vercel.app/api/test-notif'
+  })
+}
+
+// ✅ POST: Crea la notificación de prueba
 export async function POST() {
   console.log('🧪 [TEST] Iniciando prueba de notificación...')
   
@@ -13,20 +22,17 @@ export async function POST() {
   try {
     console.log('📤 Insertando notificación de prueba...')
     
-    // ✅ CORREGIDO: 
-    // 1. Desestructurar { data, error } (no testNotif)
-    // 2. Agregar clave "data:" antes del objeto anidado
     const { data, error } = await supabase
       .from('notifications')
       .insert({
         user_id: '6bafc166-ea84-4e03-9526-000d64e4c8c6',
         type: 'test_notification',
         title: '🧪 Prueba de Notificación',
-        message: 'Si ves esto, la API puede crear notificaciones',
-        data: { test: true, timestamp: new Date().toISOString() }, // ← ✅ Agregada clave "data:"
+        message: 'Si ves esto en Supabase, la API funciona correctamente.',
+         { test: true, timestamp: new Date().toISOString() },
         read: false
       })
-      .select() // ✅ Agregado .select() para recibir los datos insertados
+      .select()
 
     if (error) {
       console.error('❌ [TEST] Error de Supabase:', {
