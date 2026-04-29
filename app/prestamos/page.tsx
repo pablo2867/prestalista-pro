@@ -1,4 +1,4 @@
-// app/prestamos/page.tsx - BOTÓN HAMBURGUESA POSICIONADO CORRECTAMENTE
+// app/prestamos/page.tsx - VERSIÓN FINAL CON VALIDACIÓN DE userId
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -76,6 +76,8 @@ export default function PrestamosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // ✅ VALIDACIONES
     if (!formData.prestatario_id) return alert('👤 Selecciona un prestatario')
     const monto = parseFloat(formData.monto_principal)
     if (isNaN(monto) || monto <= 0) return alert('💰 El monto debe ser mayor a 0')
@@ -85,27 +87,57 @@ export default function PrestamosPage() {
     if (isNaN(plazo) || plazo <= 0) return alert('📅 El plazo debe ser mayor a 0')
     const inicial = parseFloat(formData.cuota_inicial) || 0
     if (inicial > monto) return alert('⚠️ La cuota inicial no puede ser mayor al monto')
+    
+    // ✅ VALIDACIÓN CRÍTICA: Verificar que user?.id existe antes de enviar
+    if (!user?.id) {
+      console.error('❌ [Prestamos] userId no disponible - user:', user)
+      return alert('⚠️ Sesión no válida. Por favor inicia sesión nuevamente.')
+    }
 
     setFormLoading(true)
     try {
-      // ✅ CORREGIDO: Agregar userId al cuerpo de la petición para la notificación
+      // ✅ LOG DE DIAGNÓSTICO (aparece en consola del navegador)
+      console.log('📤 [Prestamos] Enviando a API:', {
+        formDataKeys: Object.keys(formData),
+        userId: user?.id,
+        userIdType: typeof user?.id,
+        timestamp: new Date().toISOString()
+      })
+
+      // ✅ CUERPO DE LA PETICIÓN CON userId GARANTIZADO
       const body = {
         ...formData,
-        userId: user?.id  // ← CRÍTICO: Para que la API cree la notificación
+        userId: user?.id  // ← Ahora sabemos que existe por la validación anterior
       }
 
       const res = await fetch('/api/prestamos', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(body)  // ← Enviar body con userId incluido
+        body: JSON.stringify(body)
       })
+      
       const result = await res.json()
+      
+      // ✅ LOG DE RESPUESTA
+      console.log('📥 [Prestamos] Respuesta API:', {
+        success: result.success,
+        error: result.error,
+        insertedId: result.inserted?.id
+      })
+      
       if (result.success) { 
         alert('✅ Préstamo registrado')
         setFormData({ prestatario_id: '', distribuidor_id: '', monto_principal: '', tasa_interes_mensual: '10', plazo_meses: '6', cuota_inicial: '0', notas: '', garantia: '' })
         loadData() 
-      } else { alert('❌ ' + result.error) }
-    } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
+      } else { 
+        alert('❌ ' + result.error) 
+      }
+    } catch (err: any) { 
+      console.error('❌ [Prestamos] Error:', err)
+      alert('Error: ' + err.message) 
+    } finally { 
+      setFormLoading(false) 
+    }
   }
 
   const handleRegistrarPago = (prestamo: any) => {
