@@ -1,4 +1,4 @@
-// app/api/test-notif/route.ts - VERSIÓN FINAL CON TIPO VÁLIDO
+// app/api/test-notif/route.ts - VERSIÓN FINAL 100% CORREGIDA
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -15,15 +15,14 @@ export async function POST() {
   )
 
   try {
-    // ✅ USAR 'nuevo_prestamo' que SÍ está en el CHECK constraint
     const { data, error } = await supabase
       .from('notifications')
       .insert({
         user_id: '6bafc166-ea84-4e03-9526-000d64e4c8c6',
-        type: 'nuevo_prestamo',  // ✅ Valor permitido: está en el constraint
+        type: 'nuevo_prestamo',
         title: '🧪 Prueba de API de Préstamos',
         message: 'Notificación de prueba creada exitosamente',
-         { test: true, timestamp: new Date().toISOString() },
+        data: { test: true, timestamp: new Date().toISOString() },
         read: false
       })
       .select()
