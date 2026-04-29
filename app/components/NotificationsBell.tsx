@@ -1,4 +1,4 @@
-// app/components/NotificationsBell.tsx - VERSIÓN FINAL CON AUDIO ROBUSTO
+// app/components/NotificationsBell.tsx - VERSIÓN FINAL ESTABILIZADA
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -26,19 +26,26 @@ export default function NotificationsBell() {
   const channelRef = useRef<any>(null)
   
   // ✅ Hook de audio blindado
-  const { play, vibrate, unlocked } = useNotificationSound()
+  const { play, vibrate } = useNotificationSound()
 
+  // ✅ CORRECCIÓN CRÍTICA: Dependencia en user?.id para evitar re-suscripciones constantes
   useEffect(() => {
-    if (user) {
-      fetchNotifications()
-      setupRealtimeSubscription()
-    }
+    // Si no hay ID de usuario válido, no hacemos nada
+    if (!user?.id) return
+
+    console.log('🔧 [Bell] Iniciando suscripción para user_id:', user.id)
+    
+    fetchNotifications()
+    setupRealtimeSubscription()
+
+    // Cleanup: solo se ejecuta cuando el componente se desmonta REALMENTE o cambia el user_id
     return () => {
       if (channelRef.current) {
+        console.log('🧹 [Bell] Limpiando suscripción anterior...')
         supabase.removeChannel(channelRef.current)
       }
     }
-  }, [user])
+  }, [user?.id]) // 👈 CAMBIO CLAVE: user?.id en lugar de user
 
   const fetchNotifications = async () => {
     try {
@@ -54,7 +61,7 @@ export default function NotificationsBell() {
         query = query.eq('distribuidor_id', user.id)
       }
 
-      const {  data, error } = await query
+      const { data, error } = await query
       if (error) throw error
       
       setNotifications(data || [])
@@ -67,10 +74,15 @@ export default function NotificationsBell() {
   }
 
   const setupRealtimeSubscription = () => {
-    console.log('🔧 [Bell] Configurando suscripción para user_id:', user?.id)
+    if (!user?.id) return
+    
+    // Usar un nombre de canal único para evitar conflictos
+    const channelName = `notifications_${user?.id}`
+    
+    console.log('🔧 [Bell] Configurando suscripción para canal:', channelName)
     
     channelRef.current = supabase
-      .channel(`notifications_${user?.id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -83,17 +95,13 @@ export default function NotificationsBell() {
           console.log('🔔 [Bell] ¡EVENTO RECIBIDO!', payload.new)
           const newNotification = payload.new as Notification
           
-          // ✅ CRÍTICO: Reproducir audio/vibración INMEDIATAMENTE
-          console.log('🔊 [Bell] Audio unlocked:', unlocked, '- Llamando a play()')
+          console.log('🔊 [Bell] Intentando reproducir audio...')
           play()
           
-          console.log('📳 [Bell] Llamando a vibrate()')
+          console.log('📳 [Bell] Intentando vibrar...')
           vibrate()
           
-          // Mostrar toast visual
           showToast(newNotification.title, newNotification.message)
-          
-          // Actualizar estado
           setNotifications(prev => [newNotification, ...prev])
           setUnreadCount(prev => prev + 1)
           
@@ -106,7 +114,6 @@ export default function NotificationsBell() {
   }
 
   const showToast = (title: string, message: string) => {
-    // Eliminar toasts anteriores para evitar acumulación
     const existing = document.querySelector('[data-notification-toast]')
     if (existing) existing.remove()
     
@@ -144,12 +151,9 @@ export default function NotificationsBell() {
       </style>
     `
     
-    // Cerrar al hacer clic en el toast
     toast.onclick = () => toast.remove()
-    
     document.body.appendChild(toast)
     
-    // Auto-eliminar después de 5 segundos
     setTimeout(() => {
       if (toast.parentNode) {
         toast.style.animation = 'slideIn 0.3s ease reverse'
