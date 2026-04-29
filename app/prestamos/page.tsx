@@ -1,4 +1,4 @@
-// app/prestamos/page.tsx - VERSIÓN PROFESIONAL CON PAGINACIÓN Y BÚSQUEDA
+// app/prestamos/page.tsx - LAYOUT PROFESIONAL COMPLETO
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { useGlobalContext } from '../lib/GlobalContext'
 import { useAuth } from '../lib/AuthContext'
 import ProtectedRoute from '../lib/ProtectedRoute'
+import NotificationsBell from '../components/NotificationsBell'
+import SearchBar from '../components/SearchBar'
 
 export default function PrestamosPage() {
   const { user, signOut, isAdmin, isDistributor, isCollector } = useAuth()
@@ -13,8 +15,6 @@ export default function PrestamosPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [prestamos, setPrestamos] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ total: 0, activos: 0, totalPrestado: 0, totalPorCobrar: 0 })
-  
-  // ✅ NUEVOS ESTADOS PARA BÚSQUEDA Y PAGINACIÓN
   const [searchTerm, setSearchTerm] = useState('')
   const [filterEstado, setFilterEstado] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -80,7 +80,6 @@ export default function PrestamosPage() {
     } else { setCalculo({ montoTotal: 0, cuotaMensual: 0, interesTotal: 0 }) }
   }, [formData.monto_principal, formData.tasa_interes_mensual, formData.plazo_meses, formData.cuota_inicial])
 
-  // ✅ FUNCIÓN PARA OBTENER userId DESDE MÚLTIPLES FUENTES (MANTENIDA)
   const getUserId = (): string | null => {
     if (user?.id) return user.id
     try {
@@ -89,14 +88,7 @@ export default function PrestamosPage() {
         const payload = JSON.parse(decodeURIComponent(escape(window.atob(token.split('.')[1]))))
         if (payload?.sub) return payload.sub
       }
-    } catch (e) { console.warn('⚠️ No se pudo parsear token de localStorage') }
-    try {
-      const session = sessionStorage.getItem('sb-dbnqkvcsdeluekfyxqcu-auth-token')
-      if (session) {
-        const payload = JSON.parse(decodeURIComponent(escape(window.atob(session.split('.')[1]))))
-        if (payload?.sub) return payload.sub
-      }
-    } catch (e) { console.warn('⚠️ No se pudo parsear token de sessionStorage') }
+    } catch (e) { console.warn('⚠️ No se pudo parsear token') }
     return null
   }
 
@@ -212,7 +204,6 @@ export default function PrestamosPage() {
     return <span style={{ padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '600', ...styles[estado] }}>{estado.toUpperCase()}</span>
   }
 
-  // ✅ FILTRAR Y BUSCAR PRÉSTAMOS
   const prestamosFiltrados = prestamos.filter((p) => {
     const matchSearch = 
       p.prestatario?.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -221,27 +212,30 @@ export default function PrestamosPage() {
     return matchSearch && matchEstado
   })
 
-  // ✅ PAGINACIÓN
   const totalPages = Math.ceil(prestamosFiltrados.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const endIndex = startIndex + ITEMS_PER_PAGE
   const prestamosPage = prestamosFiltrados.slice(startIndex, endIndex)
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>⏳ Cargando...</div>
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+        <div>Cargando...</div>
+      </div>
+    </div>
+  )
 
   return (
     <ProtectedRoute>
-      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui', color: 'white' }}>
+      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         
         {/* 📱 CSS Responsive */}
         <style>{`
           @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
             .sidebar.open { transform: translateX(0) !important; }
-            .main { margin-left: 0 !important; padding: 16px !important; }
-            .grid-form { grid-template-columns: 1fr !important; }
-            .grid-stats { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
-            .header-content { flex-direction: column !important; align-items: flex-start !important; }
+            .main-content { margin-left: 0 !important; }
             .mobile-menu-btn { display: flex !important; }
             .overlay { display: block !important; }
           }
@@ -249,275 +243,957 @@ export default function PrestamosPage() {
             .overlay { display: none !important; }
             .mobile-menu-btn { display: none !important; }
           }
-          @media print { 
-            aside, .no-print, .overlay { display: none !important; } 
-            main { margin-left: 0 !important; padding: 20px !important; } 
-            body { background: white !important; color: black !important; } 
-            * { color: black !important; background: white !important; } 
-          }
         `}</style>
 
+        {/* Overlay para móvil */}
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
 
-        {/* Sidebar */}
-        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '260px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed' as const, top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column' as const, zIndex: 50 }}>
-          <div style={{ padding: '20px', borderBottom: '1px solid #1f2937', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#1e40af', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 18, fontWeight: 'bold', color: 'white' }}>{getInitials()}</span>
+        {/* ✅ SIDEBAR - ESTRUCTURADO Y CONTENIDO */}
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ 
+          width: '280px', 
+          backgroundColor: '#111827', 
+          borderRight: '1px solid #1f2937', 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          bottom: 0, 
+          display: 'flex', 
+          flexDirection: 'column',
+          zIndex: 50,
+          transition: 'transform 0.3s ease'
+        }}>
+          {/* Header del Sidebar */}
+          <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>💼</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'white' }}>PrestaLista</div>
+            </div>
+            
+            {/* ✅ AVATAR DEL USUARIO - BIEN VISIBLE */}
+            <div style={{ 
+              backgroundColor: '#1f2937', 
+              borderRadius: '12px', 
+              padding: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{ 
+                width: '48px', 
+                height: '48px', 
+                borderRadius: '50%', 
+                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                fontSize: '20px',
+                fontWeight: 'bold',
+                color: 'white'
+              }}>
+                {getInitials()}
               </div>
-              <div>
-                <div style={{ fontWeight: 'bold', fontSize: 14 }}>{user?.full_name || 'Usuario'}</div>
-                <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' as const, ...getRoleColor() }}>{user?.role}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: '600', fontSize: '14px', color: 'white', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user?.full_name || 'Usuario'}
+                </div>
+                <div style={{ 
+                  display: 'inline-block',
+                  padding: '2px 8px', 
+                  borderRadius: '4px', 
+                  fontSize: '11px', 
+                  fontWeight: '600', 
+                  textTransform: 'uppercase',
+                  backgroundColor: isAdmin() ? '#7c3aed' : isDistributor() ? '#2563eb' : '#059669',
+                  color: 'white'
+                }}>
+                  {user?.role || 'ADMIN'}
+                </div>
               </div>
             </div>
           </div>
-          <nav style={{ flex: 1, overflowY: 'auto' as const, padding: '16px 12px' }}>
-            <Link href="/dashboard" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>📊 Dashboard</Link>
-            <Link href="/prestamos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 12, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', borderRadius: 8, marginBottom: 4, textDecoration: 'none', fontWeight: 600 }}>📄 Préstamos</Link>
-            {(isAdmin() || isCollector()) && <Link href="/movimientos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>📋 Movimientos</Link>}
-            {isAdmin() ? (
-              <Link href="/prestatarios" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>👤 Prestatarios</Link>
-            ) : (
-              <Link href="/prestatarios?mis-clientes=true" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>👤 Mis Clientes</Link>
+
+          {/* Menú de Navegación */}
+          <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px' }}>
+            <Link href="/dashboard" onClick={() => setSidebarOpen(false)} style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              gap: '12px', 
+              padding: '12px 16px', 
+              color: '#9ca3af', 
+              borderRadius: '8px', 
+              marginBottom: '4px',
+              textDecoration: 'none',
+              transition: 'all 0.2s',
+              ':hover': { backgroundColor: '#1f2937', color: 'white' }
+            }}>
+              <span style={{ fontSize: '18px' }}>📊</span>
+              <span style={{ fontWeight: '500' }}>Dashboard</span>
+            </Link>
+            
+            <Link href="/prestamos" onClick={() => setSidebarOpen(false)} style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              gap: '12px', 
+              padding: '12px 16px', 
+              background: 'rgba(59,130,246,0.15)', 
+              color: '#60a5fa', 
+              borderRadius: '8px', 
+              marginBottom: '4px',
+              textDecoration: 'none',
+              fontWeight: '600'
+            }}>
+              <span style={{ fontSize: '18px' }}>📄</span>
+              <span>Préstamos</span>
+            </Link>
+            
+            {(isAdmin() || isCollector()) && (
+              <Link href="/movimientos" onClick={() => setSidebarOpen(false)} style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '12px', 
+                padding: '12px 16px', 
+                color: '#9ca3af', 
+                borderRadius: '8px', 
+                marginBottom: '4px',
+                textDecoration: 'none',
+                transition: 'all 0.2s',
+                ':hover': { backgroundColor: '#1f2937', color: 'white' }
+              }}>
+                <span style={{ fontSize: '18px' }}>📋</span>
+                <span>Movimientos</span>
+              </Link>
             )}
-            {isAdmin() && <Link href="/distribuidores" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>🤝 Distribuidores</Link>}
+            
+            {isAdmin() ? (
+              <Link href="/prestatarios" onClick={() => setSidebarOpen(false)} style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '12px', 
+                padding: '12px 16px', 
+                color: '#9ca3af', 
+                borderRadius: '8px', 
+                marginBottom: '4px',
+                textDecoration: 'none',
+                transition: 'all 0.2s',
+                ':hover': { backgroundColor: '#1f2937', color: 'white' }
+              }}>
+                <span style={{ fontSize: '18px' }}>👤</span>
+                <span>Prestatarios</span>
+              </Link>
+            ) : (
+              <Link href="/prestatarios?mis-clientes=true" onClick={() => setSidebarOpen(false)} style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '12px', 
+                padding: '12px 16px', 
+                color: '#9ca3af', 
+                borderRadius: '8px', 
+                marginBottom: '4px',
+                textDecoration: 'none',
+                transition: 'all 0.2s',
+                ':hover': { backgroundColor: '#1f2937', color: 'white' }
+              }}>
+                <span style={{ fontSize: '18px' }}>👤</span>
+                <span>Mis Clientes</span>
+              </Link>
+            )}
+            
+            {isAdmin() && (
+              <Link href="/distribuidores" onClick={() => setSidebarOpen(false)} style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '12px', 
+                padding: '12px 16px', 
+                color: '#9ca3af', 
+                borderRadius: '8px', 
+                marginBottom: '4px',
+                textDecoration: 'none',
+                transition: 'all 0.2s',
+                ':hover': { backgroundColor: '#1f2937', color: 'white' }
+              }}>
+                <span style={{ fontSize: '18px' }}>🤝</span>
+                <span>Distribuidores</span>
+              </Link>
+            )}
           </nav>
-          <div style={{ padding: '16px', borderTop: '1px solid #1f2937', backgroundColor: '#111827', flexShrink: 0 }}>
-            <button onClick={signOut} style={{ width: '100%', padding: 12, backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 14 }}>🚪 Cerrar Sesión</button>
+
+          {/* Footer del Sidebar - Cerrar Sesión */}
+          <div style={{ padding: '20px', borderTop: '1px solid #1f2937' }}>
+            <button 
+              onClick={() => { signOut(); setSidebarOpen(false); }} 
+              style={{ 
+                width: '100%', 
+                padding: '12px', 
+                backgroundColor: '#dc2626', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '8px', 
+                cursor: 'pointer', 
+                fontWeight: '600',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'background-color 0.2s',
+                ':hover': { backgroundColor: '#b91c1c' }
+              }}
+            >
+              <span>🚪</span>
+              <span>Cerrar Sesión</span>
+            </button>
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
+        {/* ✅ MAIN CONTENT AREA - CONTENIDA Y ESTRUCTURADA */}
+        <main className="main-content" style={{ 
+          marginLeft: '280px', 
+          flex: 1, 
+          minHeight: '100vh',
+          backgroundColor: '#0b0f19'
+        }}>
           
-          <button 
-            className="mobile-menu-btn" 
-            onClick={() => setSidebarOpen(true)} 
-            style={{ 
-              display: 'none',
-              position: 'fixed', 
-              top: '70px',
-              left: '16px', 
-              zIndex: 100, 
-              padding: '10px 14px', 
-              backgroundColor: '#2563eb', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '8px', 
-              cursor: 'pointer', 
-              fontSize: '20px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
-            }}
-          >
-            ☰
-          </button>
-          
-          <div className="header-content" style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <div style={{ marginBottom: 16 }}>
-              <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>Gestión de Préstamos</h1>
-              <p style={{ margin: '6px 0 0', opacity: 0.9 }}>Administra préstamos, intereses y cobros</p>
-            </div>
-            <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-              <button onClick={() => window.print()} className="no-print" style={{ flex: 1, padding: '12px 20px', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>🖨️ Imprimir</button>
-              <button onClick={exportarPrestamos} className="no-print" style={{ flex: 1, padding: '12px 20px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📥 Exportar</button>
-            </div>
-          </div>
+          {/* Header Superior */}
+          <header style={{ 
+            backgroundColor: '#111827', 
+            borderBottom: '1px solid #1f2937', 
+            padding: '16px 32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 30
+          }}>
+            <button 
+              className="mobile-menu-btn"
+              onClick={() => setSidebarOpen(true)} 
+              style={{ 
+                display: 'none',
+                padding: '8px 12px', 
+                backgroundColor: '#3b82f6', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '8px', 
+                cursor: 'pointer', 
+                fontSize: '20px'
+              }}
+            >
+              ☰
+            </button>
 
-          {/* Stats Grid */}
-          <div className="grid-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 24 }}>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Total</div><div style={{fontSize:28,fontWeight:'bold',color:'#60a5fa'}}>{metrics.total}</div></div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Activos</div><div style={{fontSize:28,fontWeight:'bold',color:'#34d399'}}>{metrics.activos}</div></div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Prestado</div><div style={{fontSize:28,fontWeight:'bold',color:'#fbbf24'}}>${metrics.totalPrestado.toLocaleString()}</div></div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Por Cobrar</div><div style={{fontSize:28,fontWeight:'bold',color:'#f87171'}}>${metrics.totalPorCobrar.toLocaleString()}</div></div>
-          </div>
+            {/* Barra de Búsqueda */}
+            <div style={{ flex: 1, maxWidth: '600px' }}>
+              <SearchBar />
+            </div>
 
-          {/* Formulario */}
-          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 600 }}>📝 Nuevo Préstamo</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="grid-form" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-                <div style={{ gridColumn: '1 / -1' }}><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Prestatario *</label><select value={formData.prestatario_id} onChange={(e) => setFormData({...formData, prestatario_id: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }}><option value="">Seleccionar...</option>{prestatarios.map((p: any) => <option key={p.id} value={p.id}>{p.nombre} {p.apellido}</option>)}</select></div>
-                <div><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Monto *</label><input type="number" placeholder="0.00" value={formData.monto_principal} onChange={(e) => setFormData({...formData, monto_principal: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} /></div>
-                <div><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Tasa Mensual % *</label><input type="number" step="0.01" placeholder="10" value={formData.tasa_interes_mensual} onChange={(e) => setFormData({...formData, tasa_interes_mensual: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} /></div>
-                <div><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Plazo (meses) *</label><input type="number" placeholder="6" value={formData.plazo_meses} onChange={(e) => setFormData({...formData, plazo_meses: e.target.value})} required style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} /></div>
-                <div><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Cuota Inicial</label><input type="number" placeholder="0.00" value={formData.cuota_inicial} onChange={(e) => setFormData({...formData, cuota_inicial: e.target.value})} style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} /></div>
+            {/* Notificaciones */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <NotificationsBell />
+            </div>
+          </header>
+
+          {/* Contenido Principal de la Página */}
+          <div style={{ padding: '32px' }}>
+            
+            {/* Header de la Página */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', 
+              borderRadius: '16px', 
+              padding: '32px', 
+              marginBottom: '32px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+            }}>
+              <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: '0 0 8px 0', color: 'white' }}>
+                Gestión de Préstamos
+              </h1>
+              <p style={{ margin: '0 0 24px 0', opacity: 0.9, color: 'rgba(255,255,255,0.9)' }}>
+                Administra préstamos, intereses y cobros
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => window.print()} className="no-print" style={{ 
+                  flex: 1, 
+                  padding: '12px 24px', 
+                  backgroundColor: 'rgba(255,255,255,0.2)', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '8px', 
+                  cursor: 'pointer', 
+                  fontWeight: '600',
+                  backdropFilter: 'blur(4px)',
+                  transition: 'background-color 0.2s',
+                  ':hover': { backgroundColor: 'rgba(255,255,255,0.3)' }
+                }}>
+                  🖨️ Imprimir
+                </button>
+                <button onClick={exportarPrestamos} className="no-print" style={{ 
+                  flex: 1, 
+                  padding: '12px 24px', 
+                  backgroundColor: '#10b981', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '8px', 
+                  cursor: 'pointer', 
+                  fontWeight: '600',
+                  transition: 'background-color 0.2s',
+                  ':hover': { backgroundColor: '#059669' }
+                }}>
+                  📥 Exportar
+                </button>
               </div>
-              
-              {calculo.montoTotal > 0 && (
-                <div style={{ backgroundColor: '#030712', border: '1px solid #374151', borderRadius: 8, padding: 16, margin: '16px 0' }}>
-                  <div className="grid-form" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                    <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Total a Pagar</div><div style={{ fontSize: 20, fontWeight: 'bold', color: '#fbbf24' }}>${calculo.montoTotal.toLocaleString()}</div></div>
-                    <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Interés Total</div><div style={{ fontSize: 20, fontWeight: 'bold', color: '#f87171' }}>${calculo.interesTotal.toLocaleString()}</div></div>
-                    <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Cuota Mensual</div><div style={{ fontSize: 20, fontWeight: 'bold', color: '#34d399' }}>${calculo.cuotaMensual.toLocaleString()}</div></div>
+            </div>
+
+            {/* Stats Cards */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+              gap: '20px', 
+              marginBottom: '32px' 
+            }}>
+              <div style={{ 
+                backgroundColor: '#111827', 
+                border: '1px solid #1f2937', 
+                borderRadius: '12px', 
+                padding: '24px' 
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Total</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#60a5fa' }}>{metrics.total}</div>
+              </div>
+              <div style={{ 
+                backgroundColor: '#111827', 
+                border: '1px solid #1f2937', 
+                borderRadius: '12px', 
+                padding: '24px' 
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Activos</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#34d399' }}>{metrics.activos}</div>
+              </div>
+              <div style={{ 
+                backgroundColor: '#111827', 
+                border: '1px solid #1f2937', 
+                borderRadius: '12px', 
+                padding: '24px' 
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Prestado</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fbbf24' }}>${metrics.totalPrestado.toLocaleString()}</div>
+              </div>
+              <div style={{ 
+                backgroundColor: '#111827', 
+                border: '1px solid #1f2937', 
+                borderRadius: '12px', 
+                padding: '24px' 
+              }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Por Cobrar</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#f87171' }}>${metrics.totalPorCobrar.toLocaleString()}</div>
+              </div>
+            </div>
+
+            {/* Formulario de Nuevo Préstamo */}
+            <div style={{ 
+              backgroundColor: '#111827', 
+              border: '1px solid #1f2937', 
+              borderRadius: '12px', 
+              padding: '32px', 
+              marginBottom: '32px' 
+            }}>
+              <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>
+                📝 Nuevo Préstamo
+              </h2>
+              <form onSubmit={handleSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                      Prestatario *
+                    </label>
+                    <select 
+                      value={formData.prestatario_id} 
+                      onChange={(e) => setFormData({...formData, prestatario_id: e.target.value})} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        backgroundColor: '#030712', 
+                        border: '1px solid #1f2937', 
+                        borderRadius: '8px', 
+                        color: 'white', 
+                        fontSize: '14px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {prestatarios.map((p: any) => (
+                        <option key={p.id} value={p.id}>{p.nombre} {p.apellido}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                      Monto *
+                    </label>
+                    <input 
+                      type="number" 
+                      placeholder="0.00" 
+                      value={formData.monto_principal} 
+                      onChange={(e) => setFormData({...formData, monto_principal: e.target.value})} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        backgroundColor: '#030712', 
+                        border: '1px solid #1f2937', 
+                        borderRadius: '8px', 
+                        color: 'white', 
+                        fontSize: '14px' 
+                      }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                      Tasa Mensual % *
+                    </label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="10" 
+                      value={formData.tasa_interes_mensual} 
+                      onChange={(e) => setFormData({...formData, tasa_interes_mensual: e.target.value})} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        backgroundColor: '#030712', 
+                        border: '1px solid #1f2937', 
+                        borderRadius: '8px', 
+                        color: 'white', 
+                        fontSize: '14px' 
+                      }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                      Plazo (meses) *
+                    </label>
+                    <input 
+                      type="number" 
+                      placeholder="6" 
+                      value={formData.plazo_meses} 
+                      onChange={(e) => setFormData({...formData, plazo_meses: e.target.value})} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        backgroundColor: '#030712', 
+                        border: '1px solid #1f2937', 
+                        borderRadius: '8px', 
+                        color: 'white', 
+                        fontSize: '14px' 
+                      }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                      Cuota Inicial
+                    </label>
+                    <input 
+                      type="number" 
+                      placeholder="0.00" 
+                      value={formData.cuota_inicial} 
+                      onChange={(e) => setFormData({...formData, cuota_inicial: e.target.value})} 
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        backgroundColor: '#030712', 
+                        border: '1px solid #1f2937', 
+                        borderRadius: '8px', 
+                        color: 'white', 
+                        fontSize: '14px' 
+                      }} 
+                    />
                   </div>
                 </div>
-              )}
-              
-              <div style={{ marginTop: 24 }}>
-                <button type="submit" disabled={formLoading} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #2563eb, #3b82f6)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}>{formLoading ? '⏳...' : '💾 Registrar'}</button>
-              </div>
-            </form>
-          </div>
-
-          {/* ✅ NUEVA SECCIÓN: BÚSQUEDA Y FILTROS MEJORADOS */}
-          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
-              <div>
-                <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>🔍 Buscar por cliente</label>
-                <input
-                  type="text"
-                  placeholder="Nombre o apellido..."
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }}
-                  style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 14 }}
-                />
-              </div>
-              <div>
-                <label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>📊 Filtrar por estado</label>
-                <select
-                  value={filterEstado}
-                  onChange={(e) => { setFilterEstado(e.target.value); setCurrentPage(1) }}
-                  style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 14 }}
-                >
-                  <option value="">Todos los estados</option>
-                  <option value="activo">✅ Activos</option>
-                  <option value="pagado">✅ Pagados</option>
-                  <option value="vencido">⚠️ Vencidos</option>
-                  <option value="cancelado">❌ Cancelados</option>
-                </select>
-              </div>
-              {(searchTerm || filterEstado) && (
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <button
-                    onClick={() => { setSearchTerm(''); setFilterEstado(''); setCurrentPage(1) }}
-                    style={{ padding: '12px 24px', backgroundColor: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                
+                {calculo.montoTotal > 0 && (
+                  <div style={{ 
+                    backgroundColor: '#030712', 
+                    border: '1px solid #374151', 
+                    borderRadius: '8px', 
+                    padding: '20px', 
+                    margin: '24px 0' 
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Total a Pagar</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fbbf24' }}>${calculo.montoTotal.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Interés Total</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f87171' }}>${calculo.interesTotal.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Cuota Mensual</div>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#34d399' }}>${calculo.cuotaMensual.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div style={{ marginTop: '24px' }}>
+                  <button 
+                    type="submit" 
+                    disabled={formLoading} 
+                    style={{ 
+                      width: '100%', 
+                      padding: '16px', 
+                      background: 'linear-gradient(135deg, #3b82f6, #2563eb)', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      cursor: formLoading ? 'not-allowed' : 'pointer', 
+                      fontWeight: '600', 
+                      fontSize: '16px',
+                      opacity: formLoading ? 0.7 : 1,
+                      transition: 'all 0.2s',
+                      ':hover': { transform: formLoading ? 'none' : 'translateY(-2px)', boxShadow: '0 4px 12px rgba(59,130,246,0.4)' }
+                    }}
                   >
-                    🔄 Limpiar filtros
+                    {formLoading ? '⏳ Procesando...' : '💾 Registrar Préstamo'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Búsqueda y Filtros */}
+            <div style={{ 
+              backgroundColor: '#111827', 
+              border: '1px solid #1f2937', 
+              borderRadius: '12px', 
+              padding: '24px', 
+              marginBottom: '24px' 
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                    🔍 Buscar por cliente
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nombre o apellido..."
+                    value={searchTerm}
+                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }}
+                    style={{ 
+                      width: '100%', 
+                      padding: '12px', 
+                      backgroundColor: '#030712', 
+                      border: '1px solid #1f2937', 
+                      borderRadius: '8px', 
+                      color: 'white', 
+                      fontSize: '14px' 
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                    📊 Filtrar por estado
+                  </label>
+                  <select
+                    value={filterEstado}
+                    onChange={(e) => { setFilterEstado(e.target.value); setCurrentPage(1) }}
+                    style={{ 
+                      width: '100%', 
+                      padding: '12px', 
+                      backgroundColor: '#030712', 
+                      border: '1px solid #1f2937', 
+                      borderRadius: '8px', 
+                      color: 'white', 
+                      fontSize: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Todos los estados</option>
+                    <option value="activo">✅ Activos</option>
+                    <option value="pagado">✅ Pagados</option>
+                    <option value="vencido">⚠️ Vencidos</option>
+                    <option value="cancelado">❌ Cancelados</option>
+                  </select>
+                </div>
+                {(searchTerm || filterEstado) && (
+                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <button
+                      onClick={() => { setSearchTerm(''); setFilterEstado(''); setCurrentPage(1) }}
+                      style={{ 
+                        padding: '12px 24px', 
+                        backgroundColor: '#6b7280', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '8px', 
+                        cursor: 'pointer', 
+                        fontWeight: '600',
+                        transition: 'background-color 0.2s',
+                        ':hover': { backgroundColor: '#4b5563' }
+                      }}
+                    >
+                      🔄 Limpiar filtros
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '12px', 
+                backgroundColor: '#030712', 
+                borderRadius: '8px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <span style={{ color: '#9ca3af', fontSize: '14px' }}>
+                  Mostrando {prestamosPage.length} de {prestamosFiltrados.length} préstamos
+                  {prestamosFiltrados.length !== prestamos.length && ` (de ${prestamos.length} totales)`}
+                </span>
+                {totalPages > 1 && (
+                  <span style={{ color: '#60a5fa', fontSize: '14px', fontWeight: '600' }}>
+                    Página {currentPage} de {totalPages}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Lista de Préstamos */}
+            <div style={{ 
+              backgroundColor: '#111827', 
+              border: '1px solid #1f2937', 
+              borderRadius: '12px', 
+              padding: '24px' 
+            }}>
+              <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>
+                Préstamos Registrados
+              </h2>
+              
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+                  <div>Cargando préstamos...</div>
+                </div>
+              ) : prestamosPage.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
+                  <div style={{ fontSize: '16px' }}>
+                    Sin préstamos {searchTerm || filterEstado ? 'que coincidan con los filtros' : ''}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {prestamosPage.map((p: any) => (
+                    <div key={p.id} style={{ 
+                      backgroundColor: '#0b0f19', 
+                      border: '1px solid #1f2937', 
+                      borderRadius: '12px', 
+                      padding: '24px',
+                      transition: 'all 0.2s',
+                      ':hover': { borderColor: '#3b82f6', transform: 'translateY(-2px)', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }
+                    }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        marginBottom: '20px', 
+                        flexWrap: 'wrap', 
+                        gap: '16px' 
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <div style={{ 
+                            width: '48px', 
+                            height: '48px', 
+                            backgroundColor: '#1e40af', 
+                            borderRadius: '12px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontSize: '24px'
+                          }}>
+                            📄
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', fontSize: '16px', color: 'white', marginBottom: '4px' }}>
+                              {p.prestatario?.nombre} {p.prestatario?.apellido}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#9ca3af' }}>
+                              📅 {new Date(p.fecha_inicio).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </div>
+                          </div>
+                        </div>
+                        {getEstadoBadge(p.estado)}
+                      </div>
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+                        gap: '16px', 
+                        paddingTop: '20px', 
+                        borderTop: '1px solid #1f2937' 
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Principal</div>
+                          <div style={{ fontWeight: '600', fontSize: '18px', color: '#60a5fa' }}>
+                            ${Number(p.monto_principal).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Total</div>
+                          <div style={{ fontWeight: '600', fontSize: '18px', color: '#fbbf24' }}>
+                            ${Number(p.monto_total).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Cuota</div>
+                          <div style={{ fontWeight: '600', fontSize: '18px', color: '#34d399' }}>
+                            ${Number(p.cuota_mensual).toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Saldo</div>
+                          <div style={{ fontWeight: '600', fontSize: '18px', color: p.saldo_pendiente > 0 ? '#f87171' : '#34d399' }}>
+                            ${Number(p.saldo_pendiente).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      {p.estado === 'activo' && (
+                        <button 
+                          onClick={() => handleRegistrarPago(p)} 
+                          style={{ 
+                            marginTop: '20px', 
+                            width: '100%', 
+                            padding: '14px', 
+                            backgroundColor: '#059669', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: '8px', 
+                            cursor: 'pointer', 
+                            fontSize: '15px', 
+                            fontWeight: '600',
+                            transition: 'all 0.2s',
+                            ':hover': { backgroundColor: '#047857', transform: 'translateY(-2px)' }
+                          }}
+                        >
+                          💵 Registrar Pago
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  marginTop: '32px', 
+                  paddingTop: '24px', 
+                  borderTop: '1px solid #1f2937' 
+                }}>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{ 
+                      padding: '10px 20px', 
+                      backgroundColor: currentPage === 1 ? '#374151' : '#3b82f6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                      opacity: currentPage === 1 ? 0.5 : 1,
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                      ':hover': currentPage === 1 ? {} : { backgroundColor: '#2563eb', transform: 'translateY(-2px)' }
+                    }}
+                  >
+                    ← Anterior
+                  </button>
+                  
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          style={{
+                            padding: '10px 16px',
+                            backgroundColor: currentPage === pageNum ? '#3b82f6' : '#1f2937',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontWeight: currentPage === pageNum ? '600' : '400',
+                            minWidth: '44px',
+                            transition: 'all 0.2s',
+                            ':hover': currentPage === pageNum ? {} : { backgroundColor: '#374151', transform: 'translateY(-2px)' }
+                          }}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                    style={{ 
+                      padding: '10px 20px', 
+                      backgroundColor: currentPage >= totalPages ? '#374151' : '#3b82f6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                      opacity: currentPage >= totalPages ? 0.5 : 1,
+                      fontWeight: '600',
+                      transition: 'all 0.2s',
+                      ':hover': currentPage >= totalPages ? {} : { backgroundColor: '#2563eb', transform: 'translateY(-2px)' }
+                    }}
+                  >
+                    Siguiente →
                   </button>
                 </div>
               )}
             </div>
-            <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#030712', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#9ca3af', fontSize: 14 }}>
-                Mostrando {prestamosPage.length} de {prestamosFiltrados.length} préstamos
-                {prestamosFiltrados.length !== prestamos.length && ` (de ${prestamos.length} totales)`}
-              </span>
-              {totalPages > 1 && (
-                <span style={{ color: '#60a5fa', fontSize: 14, fontWeight: 600 }}>
-                  Página {currentPage} de {totalPages}
-                </span>
-              )}
-            </div>
           </div>
-
-          {/* Lista de Préstamos */}
-          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24 }}>
-            <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 600 }}>Préstamos Registrados</h2>
-            
-            {loading ? <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>⏳ Cargando...</div> : prestamosPage.length === 0 ? <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>📋 Sin préstamos {searchTerm || filterEstado ? 'que coincidan con los filtros' : ''}</div> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {prestamosPage.map((p: any) => (
-                  <div key={p.id} style={{ backgroundColor: '#0b0f19', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 40, height: 40, backgroundColor: '#1e40af', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📄</div>
-                        <div><div style={{ fontWeight: 600 }}>{p.prestatario?.nombre} {p.prestatario?.apellido}</div><div style={{ fontSize: 12, color: '#9ca3af' }}>📅 {new Date(p.fecha_inicio).toLocaleDateString('es-MX')}</div></div>
-                      </div>
-                      {getEstadoBadge(p.estado)}
-                    </div>
-                    <div className="grid-form" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, paddingTop: 16, borderTop: '1px solid #1f2937' }}>
-                      <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Principal</div><div style={{ fontWeight: 600, color: '#60a5fa' }}>${Number(p.monto_principal).toLocaleString()}</div></div>
-                      <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Total</div><div style={{ fontWeight: 600, color: '#fbbf24' }}>${Number(p.monto_total).toLocaleString()}</div></div>
-                      <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Cuota</div><div style={{ fontWeight: 600, color: '#34d399' }}>${Number(p.cuota_mensual).toLocaleString()}</div></div>
-                      <div><div style={{ fontSize: 12, color: '#9ca3af' }}>Saldo</div><div style={{ fontWeight: 600, color: p.saldo_pendiente > 0 ? '#f87171' : '#34d399' }}>${Number(p.saldo_pendiente).toLocaleString()}</div></div>
-                    </div>
-                    {p.estado === 'activo' && <button onClick={() => handleRegistrarPago(p)} style={{ marginTop: 16, width: '100%', padding: '14px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 16, fontWeight: 600 }}>💵 Registrar Pago</button>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* ✅ PAGINACIÓN */}
-            {totalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #1f2937' }}>
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  style={{ 
-                    padding: '10px 20px', 
-                    backgroundColor: currentPage === 1 ? '#374151' : '#3b82f6', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '8px', 
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.5 : 1,
-                    fontWeight: 600
-                  }}
-                >
-                  ← Anterior
-                </button>
-                
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      style={{
-                        padding: '10px 16px',
-                        backgroundColor: currentPage === page ? '#3b82f6' : '#1f2937',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: currentPage === page ? 600 : 400,
-                        minWidth: '40px'
-                      }}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
-                  style={{ 
-                    padding: '10px 20px', 
-                    backgroundColor: currentPage >= totalPages ? '#374151' : '#3b82f6', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '8px', 
-                    cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-                    opacity: currentPage >= totalPages ? 0.5 : 1,
-                    fontWeight: 600
-                  }}
-                >
-                  Siguiente →
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Modal de Pago */}
-          {showPaymentModal && selectedPrestamo && (
-            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, maxWidth: 500, width: '100%', maxHeight: '90vh', overflow: 'auto' }}>
-                <h2 style={{ margin: '0 0 24px', fontSize: 20, fontWeight: 'bold' }}>💵 Registrar Pago</h2>
-                <div style={{ marginBottom: 16, padding: 16, backgroundColor: '#030712', borderRadius: 8 }}>
-                  <div style={{ fontSize: 14, color: '#9ca3af' }}>Prestatario</div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedPrestamo.prestatario?.nombre} {selectedPrestamo.prestatario?.apellido}</div>
-                </div>
-                <div style={{ marginBottom: 16 }}><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Monto *</label><input type="number" placeholder="0.00" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16 }} /><div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Saldo pendiente: ${Number(selectedPrestamo.saldo_pendiente).toLocaleString()}</div></div>
-                <div style={{ marginBottom: 24 }}><label style={{ color: '#9ca3af', fontSize: 13, marginBottom: 8, display: 'block' }}>Notas</label><textarea placeholder="Notas..." value={paymentNotas} onChange={(e) => setPaymentNotas(e.target.value)} style={{ width: '100%', padding: '14px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: 16, minHeight: 80, resize: 'vertical' }} /></div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button onClick={() => setShowPaymentModal(false)} style={{ flex: 1, padding: '14px', backgroundColor: '#1f2937', color: '#9ca3af', border: '1px solid #374151', borderRadius: '8px', cursor: 'pointer', fontSize: 16 }}>Cancelar</button>
-                  <button onClick={confirmarPago} style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #2563eb, #3b82f6)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: 16 }}>💾 Confirmar</button>
-                </div>
-              </div>
-            </div>
-          )}
         </main>
+
+        {/* Modal de Pago */}
+        {showPaymentModal && selectedPrestamo && (
+          <div style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            backgroundColor: 'rgba(0,0,0,0.8)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 1000, 
+            padding: '20px',
+            backdropFilter: 'blur(4px)'
+          }}>
+            <div style={{ 
+              backgroundColor: '#111827', 
+              border: '1px solid #1f2937', 
+              borderRadius: '16px', 
+              padding: '32px', 
+              maxWidth: '500px', 
+              width: '100%', 
+              maxHeight: '90vh', 
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+            }}>
+              <h2 style={{ margin: '0 0 24px', fontSize: '24px', fontWeight: 'bold', color: 'white' }}>
+                💵 Registrar Pago
+              </h2>
+              <div style={{ marginBottom: '24px', padding: '20px', backgroundColor: '#030712', borderRadius: '12px' }}>
+                <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '8px' }}>Prestatario</div>
+                <div style={{ fontSize: '18px', fontWeight: '600', color: 'white' }}>
+                  {selectedPrestamo.prestatario?.nombre} {selectedPrestamo.prestatario?.apellido}
+                </div>
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                  Monto del Pago *
+                </label>
+                <input 
+                  type="number" 
+                  placeholder="0.00" 
+                  value={paymentAmount} 
+                  onChange={(e) => setPaymentAmount(e.target.value)} 
+                  style={{ 
+                    width: '100%', 
+                    padding: '14px', 
+                    backgroundColor: '#030712', 
+                    border: '1px solid #1f2937', 
+                    borderRadius: '8px', 
+                    color: 'white', 
+                    fontSize: '16px' 
+                  }} 
+                />
+                <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+                  Saldo pendiente: ${Number(selectedPrestamo.saldo_pendiente).toLocaleString()}
+                </div>
+              </div>
+              <div style={{ marginBottom: '32px' }}>
+                <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                  Notas
+                </label>
+                <textarea 
+                  placeholder="Notas adicionales..." 
+                  value={paymentNotas} 
+                  onChange={(e) => setPaymentNotas(e.target.value)} 
+                  style={{ 
+                    width: '100%', 
+                    padding: '14px', 
+                    backgroundColor: '#030712', 
+                    border: '1px solid #1f2937', 
+                    borderRadius: '8px', 
+                    color: 'white', 
+                    fontSize: '14px', 
+                    minHeight: '100px', 
+                    resize: 'vertical' 
+                  }} 
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={() => setShowPaymentModal(false)} 
+                  style={{ 
+                    flex: 1, 
+                    padding: '14px', 
+                    backgroundColor: '#1f2937', 
+                    color: '#9ca3af', 
+                    border: '1px solid #374151', 
+                    borderRadius: '8px', 
+                    cursor: 'pointer', 
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    transition: 'all 0.2s',
+                    ':hover': { backgroundColor: '#374151' }
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={confirmarPago} 
+                  style={{ 
+                    flex: 1, 
+                    padding: '14px', 
+                    background: 'linear-gradient(135deg, #3b82f6, #2563eb)', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '8px', 
+                    cursor: 'pointer', 
+                    fontWeight: '600', 
+                    fontSize: '15px',
+                    transition: 'all 0.2s',
+                    ':hover': { transform: 'translateY(-2px)', boxShadow: '0 4px 12px rgba(59,130,246,0.4)' }
+                  }}
+                >
+                  💾 Confirmar Pago
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ProtectedRoute>
   )
