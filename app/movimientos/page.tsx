@@ -1,4 +1,4 @@
-// app/movimientos/page.tsx - VERSIÓN FINAL CON BOTONES Y NOTIFICACIONES
+// app/movimientos/page.tsx - VERSIÓN FINAL CORREGIDA
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -20,7 +20,7 @@ export default function MovimientosPage() {
   
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  // Cargar datos y Avatar
+  // ✅ Cargar datos y Avatar al iniciar
   useEffect(() => {
     loadMovimientos()
     if (user?.id) {
@@ -30,7 +30,7 @@ export default function MovimientosPage() {
     }
   }, [])
 
-  // Recargar al cambiar filtro
+  // ✅ Recargar movimientos cuando cambia el filtro de tipo
   useEffect(() => {
     loadMovimientos()
   }, [filterTipo])
@@ -62,7 +62,7 @@ export default function MovimientosPage() {
     }
   }
 
-  // ✅ FUNCIÓN EXPORTAR A CSV
+  // ✅ EXPORTAR A CSV (Usa los datos ya filtrados)
   const exportarMovimientos = () => {
     const BOM = '\uFEFF'
     const headers = 'Tipo;Cliente;Monto;Fecha;Notas'
@@ -109,18 +109,25 @@ export default function MovimientosPage() {
     )
   }
 
-  // Filtrar por búsqueda
+  // ✅ FILTRADO LOCAL CORREGIDO (Maneja correctamente la estructura anidada)
   const movimientosFiltrados = movimientos.filter((m) => {
-    const cliente = m.prestamo?.prestatario ? `${m.prestamo.prestatario.nombre} ${m.prestamo.prestatario.apellido}`.toLowerCase() : ''
-    return searchTerm === '' || cliente.includes(searchTerm.toLowerCase())
+    const nombre = m.prestamo?.prestatario?.nombre || ''
+    const apellido = m.prestamo?.prestatario?.apellido || ''
+    const cliente = `${nombre} ${apellido}`.toLowerCase()
+    
+    const coincideBusqueda = searchTerm === '' || cliente.includes(searchTerm.toLowerCase())
+    const coincideTipo = filterTipo === '' || m.tipo === filterTipo
+    
+    return coincideBusqueda && coincideTipo
   })
 
-  // Paginación
+  // ✅ PAGINACIÓN
   const totalPages = Math.ceil(movimientosFiltrados.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const endIndex = startIndex + ITEMS_PER_PAGE
   const movimientosPage = movimientosFiltrados.slice(startIndex, endIndex)
 
+  // ✅ CÁLCULOS
   const totalIngresos = movimientosFiltrados.filter(m => m.tipo === 'pago').reduce((sum, m) => sum + parseFloat(m.monto || 0), 0)
   const totalEgresos = movimientosFiltrados.filter(m => m.tipo === 'egreso').reduce((sum, m) => sum + parseFloat(m.monto || 0), 0)
 
@@ -204,7 +211,7 @@ export default function MovimientosPage() {
               </div>
             </div>
 
-            {/* Stats */}
+            {/* ✅ TARJETAS DE ESTADÍSTICAS */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'20px', marginBottom:'32px' }}>
               <div style={{ backgroundColor:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'24px' }}>
                 <div style={{ color:'#9ca3af', fontSize:'14px', marginBottom:'8px' }}>Total Movimientos</div>
@@ -220,16 +227,26 @@ export default function MovimientosPage() {
               </div>
             </div>
 
-            {/* Filtros */}
+            {/* ✅ SECCIÓN DE FILTROS LOCALES (CORREGIDA) */}
             <div style={{ backgroundColor:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'24px', marginBottom:'24px' }}>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))', gap:'16px' }}>
                 <div>
                   <label style={{ color:'#9ca3af', fontSize:'13px', marginBottom:'8px', display:'block', fontWeight:'500' }}>🔍 Buscar por cliente</label>
-                  <input type="text" placeholder="Escribe nombre o apellido..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }} style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px' }} />
+                  <input 
+                    type="text" 
+                    placeholder="Escribe nombre o apellido..." 
+                    value={searchTerm} 
+                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }} 
+                    style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px' }} 
+                  />
                 </div>
                 <div>
                   <label style={{ color:'#9ca3af', fontSize:'13px', marginBottom:'8px', display:'block', fontWeight:'500' }}>📊 Filtrar por tipo</label>
-                  <select value={filterTipo} onChange={(e) => setFilterTipo(e.target.value)} style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px', cursor:'pointer' }}>
+                  <select 
+                    value={filterTipo} 
+                    onChange={(e) => { setFilterTipo(e.target.value); setCurrentPage(1) }} 
+                    style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px', cursor:'pointer' }}
+                  >
                     <option value="">Todos los tipos</option>
                     <option value="pago">💵 Pagos</option>
                     <option value="prestamo">📄 Préstamos</option>
@@ -248,7 +265,7 @@ export default function MovimientosPage() {
               </div>
             </div>
 
-            {/* Lista */}
+            {/* ✅ LISTA DE MOVIMIENTOS */}
             <div style={{ backgroundColor:'#111827', border:'1px solid #1f2937', borderRadius:'12px', padding:'24px' }}>
               <h2 style={{ margin:'0 0 24px', fontSize:'20px', fontWeight:'600', color:'white' }}>Movimientos Registrados</h2>
               {movimientosPage.length===0 ? (
@@ -263,7 +280,7 @@ export default function MovimientosPage() {
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', flexWrap:'wrap', gap:'16px' }}>
                         <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
                           <div style={{ width:'48px', height:'48px', backgroundColor:m.tipo==='pago'?'#065f46':m.tipo==='egreso'?'#7f1d1d':'#1e40af', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>
-                            {m.tipo==='pago'?'💵':m.tipo==='egreso'?'💸':''}
+                            {m.tipo==='pago'?'💵':m.tipo==='egreso'?'💸':'📄'}
                           </div>
                           <div>
                             <div style={{ fontWeight:'600', fontSize:'16px', color:'white', marginBottom:'4px' }}>{m.prestamo?.prestatario?`${m.prestamo.prestatario.nombre} ${m.prestamo.prestatario.apellido}`:'Sin cliente'}</div>
@@ -286,7 +303,7 @@ export default function MovimientosPage() {
                 </div>
               )}
               
-              {/* Paginación */}
+              {/* ✅ PAGINACIÓN */}
               {totalPages>1 && (
                 <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'12px', marginTop:'32px', paddingTop:'24px', borderTop:'1px solid #1f2937' }}>
                   <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage===1} style={{ padding:'10px 20px', backgroundColor:currentPage===1?'#374151':'#3b82f6', color:'white', border:'none', borderRadius:'8px', cursor:currentPage===1?'not-allowed':'pointer', opacity:currentPage===1?0.5:1, fontWeight:'600' }}>← Anterior</button>
