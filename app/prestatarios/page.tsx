@@ -1,4 +1,4 @@
-// app/prestatarios/page.tsx - VERSIÓN FINAL BASADA EN PRÉSTAMOS
+// app/prestatarios/page.tsx - VERSIÓN FINAL CON NOTIFICACIÓN Y AUDIO
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -68,7 +68,7 @@ export default function PrestatariosPage() {
     }
   }
 
-  // ✅ EXPORTAR - IGUAL QUE EN PRÉSTAMOS
+  // ✅ EXPORTAR
   const exportarClientes = () => {
     const BOM = '\uFEFF'
     const headers = 'Nombre;Apellido;Teléfono;Email;Dirección;Estado;Fecha'
@@ -114,13 +114,28 @@ export default function PrestatariosPage() {
     if (!formData.nombre || !formData.apellido) return alert('👤 Nombre y apellido obligatorios')
     setFormLoading(true)
     try {
-      const { error } = await supabase.from('prestatarios').insert({
+      // 1. Registrar el cliente
+      const { data: insertedClient, error } = await supabase.from('prestatarios').insert({
         nombre: formData.nombre.trim(), apellido: formData.apellido.trim(),
         telefono: formData.telefono?.trim() || null, email: formData.email?.trim() || null,
         direccion: formData.direccion?.trim() || null
-      })
+      }).select().single() // Usamos .select().single() para obtener el ID creado
+
       if (error) throw error
-      alert('✅ Cliente registrado')
+
+      // ✅ 2. CREAR NOTIFICACIÓN (PARA QUE SUENE EL AUDIO)
+      if (user?.id && insertedClient) {
+        await supabase.from('notifications').insert({
+          user_id: user.id,
+          type: 'nuevo_lead', // Usamos un tipo válido existente
+          title: '👤 Nuevo Cliente Registrado',
+          message: `${formData.nombre} ${formData.apellido}`,
+          data: { prestatario_id: insertedClient.id },
+          read: false
+        })
+      }
+      
+      alert('✅ Cliente registrado exitosamente')
       setFormData({ nombre: '', apellido: '', telefono: '', email: '', direccion: '' })
       loadPrestatarios()
     } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
@@ -204,7 +219,7 @@ export default function PrestatariosPage() {
 
           <div style={{ padding:'32px' }}>
             
-            {/* ✅ BANNER CON BOTONES - IGUAL QUE PRÉSTAMOS */}
+            {/* BANNER CON BOTONES */}
             <div style={{ background:'linear-gradient(135deg,#3b82f6,#8b5cf6)', borderRadius:'16px', padding:'32px', marginBottom:'32px', boxShadow:'0 4px 6px rgba(0,0,0,.1)' }}>
               <h1 style={{ fontSize:'28px', fontWeight:'bold', margin:'0 0 8px 0', color:'white' }}>👤 Gestión de Clientes</h1>
               <p style={{ margin:'0 0 24px 0', opacity:0.9, color:'rgba(255,255,255,.9)' }}>Administra todos los prestatarios</p>
