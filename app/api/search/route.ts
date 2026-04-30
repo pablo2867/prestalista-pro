@@ -1,83 +1,81 @@
-// app/api/search/route.ts - DIAGNÓSTICO PRECISO
+// app/api/search/route.ts - DIAGNÓSTICO EXTREMO
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  // 🔴 VALIDACIÓN INICIAL
-  if (!url || !serviceKey) {
+  // 🔴 VALIDACIÓN CRÍTICA
+  if (!url || !serviceKey || serviceKey.length < 100) {
     return NextResponse.json({ 
-      error: 'Faltan variables de entorno',
+      error: 'SERVICE_ROLE_KEY inválida o faltante',
       debug: {
-        tieneUrl: !!url,
-        tieneServiceKey: !!serviceKey,
-        tieneAnonKey: !!anonKey,
-        serviceKeyLength: serviceKey?.length || 0
+        urlLength: url?.length || 0,
+        keyLength: serviceKey?.length || 0,
+        keyStart: serviceKey?.substring(0, 20) + '...'
       }
     }, { status: 500 })
   }
 
-  // ✅ Crear cliente SOLO con SERVICE_ROLE_KEY (sin fallback)
+  // ✅ Crear cliente SOLO con SERVICE_ROLE_KEY
   const supabase = createClient(url, serviceKey)
 
   const query = request.nextUrl.searchParams.get('q')?.trim()
-  
-  if (!query || query.length < 2) {
-    return NextResponse.json({ success: true, results: {}, total: 0 })
-  }
 
   try {
-    // 🧪 PRUEBA 1: ¿Puede leer la tabla SIN filtros?
-    const {  distTest, error: errTest } = await supabase
+    // 🧪 PRUEBA 0: ¿Podemos conectar?
+    const {  health, error: errHealth } = await supabase
       .from('distribuidores')
-      .select('id, nombre')
-      .limit(3)
-
-    if (errTest) {
-      return NextResponse.json({ 
-        error: 'No puede leer distribuidores',
-        code: errTest.code,
-        message: errTest.message,
-        hint: errTest.hint
-      }, { status: 500 })
-    }
-
-    // 🧪 PRUEBA 2: Búsqueda con ilike
-    const {  distribuidores, error: errSearch } = await supabase
+      .select('count', { count: 'exact', head: true })
+    
+    // 🧪 PRUEBA 1: Leer TODOS los distribuidores (sin filtros)
+    const {  allDist, error: errAll } = await supabase
       .from('distribuidores')
       .select('id, nombre, email')
-      .ilike('nombre', `%${query}%`)
       .limit(5)
 
-    // 🧪 PRUEBA 3: Búsqueda alternativa con filter
-    const {  distFilter } = await supabase
+    // 🧪 PRUEBA 2: Buscar con ilike
+    const {  likeDist, error: errLike } = await supabase
       .from('distribuidores')
-      .select('id, nombre')
-      .filter('nombre', 'ilike', `%${query}%`)
+      .select('id, nombre, email')
+      .ilike('nombre', `%${query || 'a'}%`)
       .limit(5)
+
+    // 🧪 PRUEBA 3: Buscar con filter (alternativa)
+    const {  filterDist, error: errFilter } = await supabase
+      .from('distribuidores')
+      .select('id, nombre, email')
+      .filter('nombre', 'ilike', `%${query || 'a'}%`)
+      .limit(5)
+
+    // 🧪 PRUEBA 4: Verificar políticas RLS
+    const {  policies } = await supabase
+      .rpc('pg_policies')
+      .select('tablename, policyname, cmd')
+      .eq('tablename', 'distribuidores')
 
     return NextResponse.json({
       success: true,
       query,
       debug: {
-        testSinFiltro: distTest?.length || 0,
-        searchIlike: distribuidores?.length || 0,
-        searchFilter: distFilter?.length || 0,
-        ejemplos: distTest?.slice(0, 2) || []
+        connection: health !== undefined ? '✅ OK' : '❌ FAIL',
+        allDist: { count: allDist?.length, error: errAll?.message },
+        likeSearch: { count: likeDist?.length, error: errLike?.message },
+        filterSearch: { count: filterDist?.length, error: errFilter?.message },
+        ejemplos: allDist?.slice(0, 2) || [],
+        policies: policies?.length || 0
       },
-      results: {
-        distribuidores: distribuidores || []
-      },
-      total: distribuidores?.length || 0
+      results: { distribuidores: likeDist || [] },
+      total: likeDist?.length || 0
     })
 
   } catch (error: any) {
     return NextResponse.json({ 
       error: error.message,
-      stack: error.stack
+      code: error.code,
+      hint: error.hint,
+      details: error.details
     }, { status: 500 })
   }
 }
