@@ -1,7 +1,7 @@
-// app/movimientos/page.tsx - LAYOUT PROFESIONAL IGUAL QUE PRÉSTAMOS
+// app/movimientos/page.tsx - LAYOUT PROFESIONAL CON AVATAR FUNCIONAL
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../lib/AuthContext'
 import { supabase } from '../lib/supabaseClient'
@@ -18,22 +18,38 @@ export default function MovimientosPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE = 10
   
+  // ✅ Estados para el avatar
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Cargar datos al inicio
+  // ✅ Cargar datos y Avatar al inicio
   useEffect(() => {
     loadMovimientos()
     if (user?.id) {
-      supabase.from('user_profiles').select('avatar_url').eq('id', user.id).single().then(({ data }) => {
-        if (data?.avatar_url) setAvatarUrl(data.avatar_url)
-      })
+      loadAvatar()
     }
-  }, [])
+  }, [user])
 
-  // Recargar cuando cambia el filtro de tipo
+  // Recargar movimientos cuando cambia el filtro
   useEffect(() => {
     loadMovimientos()
   }, [filterTipo])
+
+  const loadAvatar = async () => {
+    try {
+      console.log('🔍 Cargando avatar para:', user?.id)
+      const { data } = await supabase.from('user_profiles').select('avatar_url').eq('id', user.id).single()
+      if (data?.avatar_url) {
+        console.log('✅ Avatar cargado:', data.avatar_url)
+        setAvatarUrl(data.avatar_url)
+      } else {
+        console.log('⚠️ No se encontró avatar_url en user_profiles')
+      }
+    } catch (err) {
+      console.error('❌ Error cargando avatar:', err)
+    }
+  }
 
   const loadMovimientos = async () => {
     try {
@@ -48,7 +64,6 @@ export default function MovimientosPage() {
         `)
         .order('fecha', { ascending: false })
       
-      // Aplicar filtro de tipo si existe
       if (filterTipo) {
         query = query.eq('tipo', filterTipo)
       }
@@ -64,7 +79,6 @@ export default function MovimientosPage() {
     }
   }
 
-  // Iniciales del usuario para el avatar
   const getInitials = () => {
     if (user?.full_name) {
       const names = user.full_name.split(' ')
@@ -73,14 +87,52 @@ export default function MovimientosPage() {
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
-  // Color del rol
   const getRoleColor = () => {
     if (isAdmin()) return { backgroundColor: '#7c3aed', color: '#fff' }
     if (isDistributor()) return { backgroundColor: '#2563eb', color: '#fff' }
     return { backgroundColor: '#059669', color: '#fff' }
   }
 
-  // Estilo de badge por tipo de movimiento
+  // ✅ LÓGICA DE SUBIDA DE AVATAR (Igual que en Préstamos)
+  const handleAvatarClick = () => fileInputRef.current?.click()
+  
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user?.id) return
+    
+    setUploading(true)
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}.${fileExt}`
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true, cacheControl: '3600' })
+      
+      if (uploadError) throw uploadError
+      
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      const publicUrl = data.publicUrl
+      
+      await supabase.from('user_profiles').upsert({ 
+        id: user.id, 
+        avatar_url: publicUrl,
+        email: user?.email || null,
+        updated_at: new Date().toISOString()
+      })
+      
+      setAvatarUrl(publicUrl)
+      alert('✅ Avatar actualizado')
+      
+    } catch (err: any) {
+      console.error('Error al subir avatar:', err)
+      alert('Error: ' + err.message)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const getTipoBadge = (tipo: string) => {
     const styles: Record<string, any> = {
       pago: { backgroundColor: '#065f46', color: '#34d399' },
@@ -99,20 +151,17 @@ export default function MovimientosPage() {
     )
   }
 
-  // Filtrar por búsqueda de texto
   const movimientosFiltrados = movimientos.filter((m) => {
     const cliente = m.prestamo?.prestatario ? `${m.prestamo.prestatario.nombre} ${m.prestamo.prestatario.apellido}`.toLowerCase() : ''
     const matchSearch = searchTerm === '' || cliente.includes(searchTerm.toLowerCase())
     return matchSearch
   })
 
-  // Paginación
   const totalPages = Math.ceil(movimientosFiltrados.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const endIndex = startIndex + ITEMS_PER_PAGE
   const movimientosPage = movimientosFiltrados.slice(startIndex, endIndex)
 
-  // Cálculos
   const totalIngresos = movimientosFiltrados.filter(m => m.tipo === 'pago').reduce((sum, m) => sum + parseFloat(m.monto || 0), 0)
   const totalEgresos = movimientosFiltrados.filter(m => m.tipo === 'egreso').reduce((sum, m) => sum + parseFloat(m.monto || 0), 0)
 
@@ -127,9 +176,11 @@ export default function MovimientosPage() {
 
   return (
     <ProtectedRoute>
+      {/* ✅ Input oculto para subir avatar */}
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         
-        {/* CSS Responsive */}
         <style>{`
           @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
@@ -144,26 +195,38 @@ export default function MovimientosPage() {
           }
         `}</style>
 
-        {/* Overlay Móvil */}
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
 
-        {/* ✅ SIDEBAR (Igual que Préstamos) */}
+        {/* ✅ SIDEBAR */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '280px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed', top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
               <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>💼</div>
               <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'white' }}>PrestaLista</div>
             </div>
-            <div style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold', color: 'white', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)', flexShrink: 0 }}>
-                {avatarUrl ? <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : getInitials()}
+            
+            {/* ✅ Avatar Clickeable */}
+            <div 
+              onClick={handleAvatarClick} 
+              style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', transition: 'background 0.2s' }}
+            >
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold', color: 'white', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)', flexShrink: 0, position: 'relative' }}>
+                {uploading ? (
+                  <span style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⏳</span>
+                ) : avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  getInitials()
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: '600', fontSize: '14px', color: 'white', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name || 'Usuario'}</div>
                 <div style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', backgroundColor: getRoleColor().backgroundColor, color: getRoleColor().color }}>{user?.role || 'ADMIN'}</div>
               </div>
+              <span style={{ fontSize: '16px', color: '#6b7280' }}>📷</span>
             </div>
           </div>
+
           <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px' }}>
             <Link href="/dashboard" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>📊</span><span style={{ fontWeight: '500' }}>Dashboard</span></Link>
             <Link href="/prestamos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>📄</span><span>Préstamos</span></Link>
@@ -178,22 +241,17 @@ export default function MovimientosPage() {
 
         {/* ✅ MAIN CONTENT */}
         <main className="main-content" style={{ marginLeft: '280px', flex: 1, minHeight: '100vh', backgroundColor: '#0b0f19' }}>
-          
-          {/* Header Superior */}
           <header style={{ backgroundColor: '#111827', borderBottom: '1px solid #1f2937', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', position: 'sticky', top: 0, zIndex: 30 }}>
             <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', padding: '8px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', marginRight: 'auto' }}>☰</button>
             <NotificationsBell />
           </header>
 
           <div style={{ padding: '32px' }}>
-            
-            {/* Banner de Título */}
             <div style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: '16px', padding: '32px', marginBottom: '32px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
               <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: '0 0 8px 0', color: 'white' }}>📋 Historial de Movimientos</h1>
               <p style={{ margin: '0 0 24px 0', opacity: 0.9, color: 'rgba(255,255,255,0.9)' }}>Registro de pagos, préstamos y egresos</p>
             </div>
 
-            {/* Tarjetas de Estadísticas */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
               <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
                 <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Total Movimientos</div>
@@ -209,18 +267,11 @@ export default function MovimientosPage() {
               </div>
             </div>
 
-            {/* Sección de Filtros y Búsqueda */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px', marginBottom: '24px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>🔍 Buscar por cliente</label>
-                  <input 
-                    type="text" 
-                    placeholder="Escribe nombre o apellido..." 
-                    value={searchTerm} 
-                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }} 
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} 
-                  />
+                  <input type="text" placeholder="Escribe nombre o apellido..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
                 </div>
                 <div>
                   <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>📊 Filtrar por tipo</label>
@@ -243,10 +294,8 @@ export default function MovimientosPage() {
               </div>
             </div>
 
-            {/* Lista de Movimientos */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>Movimientos Registrados</h2>
-              
               {movimientosPage.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
@@ -286,8 +335,6 @@ export default function MovimientosPage() {
                   ))}
                 </div>
               )}
-
-              {/* Paginación */}
               {totalPages > 1 && (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #1f2937' }}>
                   <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '10px 20px', backgroundColor: currentPage === 1 ? '#374151' : '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, fontWeight: '600' }}>← Anterior</button>
