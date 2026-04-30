@@ -1,4 +1,4 @@
-// app/distribuidores/page.tsx - LAYOUT PROFESIONAL COMPLETO
+// app/distribuidores/page.tsx - VERSIÓN FINAL CORREGIDA
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -17,12 +17,18 @@ export default function DistribuidoresPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE = 10
   
+  // ✅ Estados para el avatar
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
+  // ✅ Formulario ajustado a la estructura real de la BD
   const [formData, setFormData] = useState({
-    nombre: '', email: '', telefono: '', comision_porcentaje: '10'
+    nombre: '',
+    email: '',
+    telefono: '',
+    comision_porcentaje: '10',
+    capital_inicial: '0'
   })
   const [formLoading, setFormLoading] = useState(false)
 
@@ -41,10 +47,18 @@ export default function DistribuidoresPage() {
   const loadDistribuidores = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase.from('distribuidores').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase
+        .from('distribuidores')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
       if (error) throw error
       setDistribuidores(data || [])
-    } catch (err) { console.error('Error:', err) } finally { setLoading(false) }
+    } catch (err) { 
+      console.error('Error:', err) 
+    } finally { 
+      setLoading(false) 
+    }
   }
 
   const handleAvatarClick = () => fileInputRef.current?.click()
@@ -71,9 +85,14 @@ export default function DistribuidoresPage() {
   // ✅ EXPORTAR A CSV
   const exportarDistribuidores = () => {
     const BOM = '\uFEFF'
-    const headers = 'Nombre;Email;Teléfono;Comisión %;Fecha Registro'
+    const headers = 'Nombre;Email;Teléfono;Comisión %;Capital Inicial;Estado;Fecha Registro'
     const rows = distribuidoresFiltrados.map((d: any) => [
-      d.nombre || '', d.email || '', d.telefono || '', d.comision_porcentaje || '0',
+      d.nombre || '', 
+      d.email || '', 
+      d.telefono || '', 
+      Number(d.comision_porcentaje || 0).toFixed(2),
+      Number(d.capital_inicial || 0).toFixed(2),
+      d.estado || 'Activo',
       new Date(d.created_at).toLocaleDateString('es-MX')
     ].join(';'))
     const csv = BOM + [headers, ...rows].join('\n')
@@ -99,11 +118,14 @@ export default function DistribuidoresPage() {
     if (!formData.nombre || !formData.email) return alert('📋 Nombre y email son obligatorios')
     setFormLoading(true)
     try {
+      // ✅ INSERT con columnas correctas de la BD
       const { data: insertedDist, error } = await supabase.from('distribuidores').insert({
         nombre: formData.nombre.trim(),
         email: formData.email.trim(),
         telefono: formData.telefono?.trim() || null,
-        comision_porcentaje: parseFloat(formData.comision_porcentaje) || 10
+        comision_porcentaje: parseFloat(formData.comision_porcentaje) || 10,
+        capital_inicial: parseFloat(formData.capital_inicial) || 0,
+        estado: 'Activo'
       }).select().single()
 
       if (error) throw error
@@ -121,9 +143,14 @@ export default function DistribuidoresPage() {
       }
       
       alert('✅ Distribuidor registrado exitosamente')
-      setFormData({ nombre: '', email: '', telefono: '', comision_porcentaje: '10' })
+      setFormData({ nombre: '', email: '', telefono: '', comision_porcentaje: '10', capital_inicial: '0' })
       loadDistribuidores()
-    } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
+    } catch (err: any) { 
+      console.error('Error:', err)
+      alert('Error: ' + err.message) 
+    } finally { 
+      setFormLoading(false) 
+    }
   }
 
   const handleEliminar = async (id: string, nombre: string) => {
@@ -234,6 +261,7 @@ export default function DistribuidoresPage() {
                   <div><label style={{ color:'#9ca3af', fontSize:'13px', marginBottom:'8px', display:'block', fontWeight:'500' }}>Email *</label><input type="email" placeholder="correo@email.com" value={formData.email} onChange={(e) => setFormData({...formData, email:e.target.value})} required style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px' }} /></div>
                   <div><label style={{ color:'#9ca3af', fontSize:'13px', marginBottom:'8px', display:'block', fontWeight:'500' }}>Teléfono</label><input type="tel" placeholder="+52 555 123 4567" value={formData.telefono} onChange={(e) => setFormData({...formData, telefono:e.target.value})} style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px' }} /></div>
                   <div><label style={{ color:'#9ca3af', fontSize:'13px', marginBottom:'8px', display:'block', fontWeight:'500' }}>Comisión %</label><input type="number" step="0.01" placeholder="10" value={formData.comision_porcentaje} onChange={(e) => setFormData({...formData, comision_porcentaje:e.target.value})} style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px' }} /></div>
+                  <div><label style={{ color:'#9ca3af', fontSize:'13px', marginBottom:'8px', display:'block', fontWeight:'500' }}>Capital Inicial</label><input type="number" step="0.01" placeholder="0" value={formData.capital_inicial} onChange={(e) => setFormData({...formData, capital_inicial:e.target.value})} style={{ width:'100%', padding:'12px', backgroundColor:'#030712', border:'1px solid #1f2937', borderRadius:'8px', color:'white', fontSize:'14px' }} /></div>
                 </div>
                 <div style={{ marginTop:'24px' }}><button type="submit" disabled={formLoading} style={{ width:'100%', padding:'16px', background:'linear-gradient(135deg,#3b82f6,#2563eb)', color:'white', border:'none', borderRadius:'8px', cursor:formLoading?'not-allowed':'pointer', fontWeight:'600', fontSize:'16px', opacity:formLoading?0.7:1 }}>{formLoading?'⏳ Registrando...':'💾 Registrar'}</button></div>
               </form>
@@ -272,7 +300,7 @@ export default function DistribuidoresPage() {
                           </div>
                         </div>
                         <div style={{ padding:'6px 12px', backgroundColor:'#065f46', color:'#34d399', borderRadius:'9999px', fontSize:'12px', fontWeight:'600' }}>
-                          {d.comision_porcentaje}% comisión
+                          {Number(d.comision_porcentaje || 0).toFixed(1)}% comisión
                         </div>
                       </div>
                       <div style={{ display:'flex', gap:'12px' }}>
