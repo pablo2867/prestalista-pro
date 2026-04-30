@@ -1,12 +1,22 @@
-// app/api/search/route.ts - VERSIÓN FINAL ROBUSTA
+// app/api/search/route.ts - VERSIÓN FINAL CON AUTH TOKEN FORWARDING
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   try {
+    // Obtener el token del usuario desde el header Authorization
+    const authHeader = request.headers.get('authorization')
+    
+    // Crear cliente Supabase
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        // 👇 IMPORTANTE: Forward el token para que RLS funcione
+        global: {
+          headers: authHeader ? { Authorization: authHeader } : {},
+        },
+      }
     )
 
     const query = request.nextUrl.searchParams.get('q')?.trim()
@@ -20,7 +30,7 @@ export async function GET(request: NextRequest) {
           prestatarios: [], 
           leads: [], 
           pagos: [], 
-          distribuidores: []  // ← SIEMPRE incluir esta clave
+          distribuidores: []
         },
         total: 0 
       })
@@ -28,35 +38,36 @@ export async function GET(request: NextRequest) {
 
     const results: any = {}
     const limit = 5
+    const pattern = `%${query}%`
 
     // 🔍 1. PRESTATARIOS
-    const { data: prestatarios } = await supabase
+    const {  prestatarios } = await supabase
       .from('prestatarios')
       .select('id, nombre, apellido, telefono, email, estado')
-      .ilike('nombre', `%${query}%`)
+      .ilike('nombre', pattern)
       .limit(limit)
     results.prestatarios = prestatarios || []
 
-    // 🔍 2. DISTRIBUIDORES ← AGREGADO
-    const { data: distribuidores } = await supabase
+    // 🔍 2. DISTRIBUIDORES
+    const {  distribuidores } = await supabase
       .from('distribuidores')
       .select('id, nombre, email, telefono, comision_porcentaje, estado')
-      .ilike('nombre', `%${query}%`)
+      .ilike('nombre', pattern)
       .limit(limit)
     results.distribuidores = distribuidores || []
 
     // 🔍 3. LEADS
-    const { data: leads } = await supabase
+    const {  leads } = await supabase
       .from('leads')
       .select('id, nombre, apellido, telefono, origen, estado')
-      .ilike('nombre', `%${query}%`)
+      .ilike('nombre', pattern)
       .limit(limit)
     results.leads = leads || []
 
     // 🔍 4. PRÉSTAMOS (solo si hay prestatarios)
     if (results.prestatarios.length > 0) {
       const ids = results.prestatarios.map((p: any) => p.id)
-      const { data: prestamos } = await supabase
+      const {  prestamos } = await supabase
         .from('prestamos')
         .select('id, monto_principal, estado, prestatario:prestatarios(nombre, apellido)')
         .in('prestatario_id', ids)
@@ -68,7 +79,7 @@ export async function GET(request: NextRequest) {
 
     // 🔍 5. PAGOS (solo si hay prestatarios)
     if (results.prestatarios.length > 0) {
-      const { data: loans } = await supabase
+      const {  loans } = await supabase
         .from('prestamos')
         .select('id')
         .in('prestatario_id', results.prestatarios.map((p: any) => p.id))
@@ -76,7 +87,7 @@ export async function GET(request: NextRequest) {
       const loanIds = loans?.map((l: any) => l.id) || []
       
       if (loanIds.length > 0) {
-        const { data: pagos } = await supabase
+        const {  pagos } = await supabase
           .from('pagos')
           .select('id, monto, fecha_pago, prestamo:prestamos(prestatario:prestatarios(nombre, apellido))')
           .in('prestamo_id', loanIds)
@@ -97,9 +108,8 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('❌ Search API Error:', error)
-    // Devolver estructura válida para no romper el frontend
     return NextResponse.json({ 
-      success: true,  // ← true para que el frontend no falle
+      success: true,
       results: { 
         prestamos: [], 
         prestatarios: [], 
