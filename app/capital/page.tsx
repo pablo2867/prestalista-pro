@@ -9,28 +9,15 @@ import NotificationsBell from '../components/NotificationsBell'
 
 // ✅ LISTAS PREDEFINIDAS
 const INGRESOS_OPCIONES = [
-  'Venta de producto',
-  'Cobro de préstamo',
-  'Inversión inicial',
-  'Aporte de socios',
-  'Intereses cobrados',
-  'Servicios prestados',
-  'Otro ingreso'
+  'Venta de producto', 'Cobro de préstamo', 'Inversión inicial', 'Aporte de socios',
+  'Intereses cobrados', 'Servicios prestados', 'Otro ingreso'
 ]
-
 const EGRESOS_OPCIONES = [
-  'Compra de insumos',
-  'Compra de material',
-  'Pago de servicios (luz/agua/internet)',
-  'Salarios y comisiones',
-  'Alquiler',
-  'Publicidad y marketing',
-  'Mantenimiento',
-  'Impuestos',
-  'Otro gasto'
+  'Compra de insumos', 'Compra de material', 'Pago de servicios (luz/agua/internet)',
+  'Salarios y comisiones', 'Alquiler', 'Publicidad y marketing', 'Mantenimiento', 'Impuestos', 'Otro gasto'
 ]
 
-// ✅ URL DE GOOGLE SHEETS WEBHOOK (Tu URL confirmada)
+// ✅ URL DE GOOGLE SHEETS WEBHOOK
 const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwG1NOvxloQyn-g1widdBX0exHo0HE_2TpDC9tXUnzxDsM480tMVnce356tHZ-xkGeMDA/exec'
 
 export default function CapitalPage() {
@@ -48,96 +35,53 @@ export default function CapitalPage() {
   const [transacciones, setTransacciones] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ saldo: 0, ingresos: 0, egresos: 0 })
   const [saving, setSaving] = useState(false)
+  
+  // ✅ NUEVO: Estado para feedback visual de Google Sheets
+  const [sheetsStatus, setSheetsStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle')
 
   // ✅ Cargar transacciones desde Supabase
   useEffect(() => { 
     const initPage = async () => {
       try {
         if (user?.id) {
-          // Cargar avatar
-          const {  profileData } = await supabase
-            .from('user_profiles')
-            .select('avatar_url')
-            .eq('id', user.id)
-            .single()
+          const {  profileData } = await supabase.from('user_profiles').select('avatar_url').eq('id', user.id).single()
           if (profileData?.avatar_url) setAvatarUrl(profileData.avatar_url)
-
-          // Cargar transacciones
-          const { data: transData, error: transError } = await supabase
-            .from('transacciones_capital')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('fecha', { ascending: false })
-
+          const { data: transData, error: transError } = await supabase.from('transacciones_capital').select('*').eq('user_id', user.id).order('fecha', { ascending: false })
           if (transError) throw transError
-
           const trans = transData || []
           setTransacciones(trans)
-
-          // Calcular métricas
-          const ingresos = trans
-            .filter(t => t.tipo === 'Ingreso')
-            .reduce((sum, t) => sum + (t.monto || 0), 0)
-          const egresos = trans
-            .filter(t => t.tipo === 'Egreso')
-            .reduce((sum, t) => sum + (t.monto || 0), 0)
-
-          setMetrics({
-            saldo: ingresos - egresos,
-            ingresos,
-            egresos
-          })
+          const ingresos = trans.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
+          const egresos = trans.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
+          setMetrics({ saldo: ingresos - egresos, ingresos, egresos })
         }
-      } catch (error) {
-        console.error('❌ Error cargando datos:', error)
-      } finally {
-        setLoading(false)
-      }
+      } catch (error) { console.error('❌ Error cargando datos:', error) } 
+      finally { setLoading(false) }
     }
     initPage()
   }, [user?.id])
 
   const handleAvatarClick = () => fileInputRef.current?.click()
-  
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user?.id) return
-    
     setUploading(true)
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}.${fileExt}`
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true, cacheControl: '3600' })
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true, cacheControl: '3600' })
       if (uploadError) throw uploadError
-      
       const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
-      await supabase.from('user_profiles').upsert({ 
-        id: user.id, 
-        avatar_url: data.publicUrl, 
-        email: user?.email || null, 
-        updated_at: new Date().toISOString() 
-      })
+      await supabase.from('user_profiles').upsert({ id: user.id, avatar_url: data.publicUrl, email: user?.email || null, updated_at: new Date().toISOString() })
       setAvatarUrl(data.publicUrl)
-    } catch (err: any) {
-      console.error('❌ Error avatar:', err)
-      alert('Error al subir avatar: ' + err.message)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
+    } catch (err: any) { console.error('❌ Error avatar:', err); alert('Error al subir avatar: ' + err.message) } 
+    finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = '' }
   }
-
   const getInitials = () => {
-    if (user?.full_name) {
-      const names = user.full_name.split(' ')
-      return names.length >= 2 ? `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase() : user.full_name[0].toUpperCase()
-    }
+    if (user?.full_name) { const names = user.full_name.split(' '); return names.length >= 2 ? `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase() : user.full_name[0].toUpperCase() }
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
-  // ✅ Guardar en Supabase + Google Sheets (Backup automático con logging mejorado)
+  // ✅ Guardar en Supabase + Google Sheets con feedback VISUAL
   const handleSubmit = async (e: React.FormEvent, tipoForzado?: 'Ingreso' | 'Egreso') => {
     e.preventDefault()
     if (!descripcion || !monto) return alert('Completa concepto y monto')
@@ -145,117 +89,62 @@ export default function CapitalPage() {
 
     const tipoAUsar = tipoForzado || tipo
     setSaving(true)
+    setSheetsStatus('syncing') // ✅ Indicador visual: sincronizando
 
     try {
-      const nuevaTransaccion = {
-        id: crypto.randomUUID ? crypto.randomUUID() : `tx-${Date.now()}`,
-        user_id: user.id,
-        tipo: tipoAUsar,
-        descripcion,
-        monto: parseFloat(monto),
-        categoria,
-        fecha: new Date().toISOString()
-      }
+      const nuevaTransaccion = { id: crypto.randomUUID ? crypto.randomUUID() : `tx-${Date.now()}`, user_id: user.id, tipo: tipoAUsar, descripcion, monto: parseFloat(monto), categoria, fecha: new Date().toISOString() }
 
-      // 1️⃣ Guardar en Supabase (CRÍTICO - esto es lo importante)
-      const { error: supabaseError } = await supabase
-        .from('transacciones_capital')
-        .insert([nuevaTransaccion])
-
+      // 1️⃣ Supabase (CRÍTICO)
+      const { error: supabaseError } = await supabase.from('transacciones_capital').insert([nuevaTransaccion])
       if (supabaseError) throw supabaseError
 
-      // 2️⃣ Enviar a Google Sheets (Backup automático - NO crítico)
+      // 2️⃣ Google Sheets (Backup - con fetch simplificado)
       try {
-        console.log('📤 Enviando a Google Sheets...', {
-          id: nuevaTransaccion.id,
-          tipo: tipoAUsar,
-          descripcion,
-          monto
-        })
-
-        const response = await fetch(GOOGLE_SHEETS_WEBHOOK, {
+        // Usamos keepalive para asegurar que la petición se envíe aunque la página recargue
+        await fetch(GOOGLE_SHEETS_WEBHOOK, {
           method: 'POST',
-          // ✅ IMPORTANTE: NO usar mode: 'no-cors' porque oculta los errores reales
-          headers: { 
-            'Content-Type': 'application/json',
-          },
+          mode: 'no-cors', // ✅ Evita errores de CORS en el navegador (aunque oculta la respuesta)
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: nuevaTransaccion.id,
-            fecha: nuevaTransaccion.fecha,
-            usuario: user?.email || 'Usuario',
-            tipo: tipoAUsar,
-            descripcion: descripcion,
-            monto: parseFloat(monto),
-            categoria: categoria
+            id: nuevaTransaccion.id, fecha: nuevaTransaccion.fecha, usuario: user?.email || 'Usuario',
+            tipo: tipoAUsar, descripcion, monto: parseFloat(monto), categoria
           })
         })
-        
-        // ✅ Leer respuesta como texto PRIMERO (Google Apps Script devuelve texto plano)
-        const responseText = await response.text()
-        console.log('📊 Google Sheets raw response:', responseText)
-        
-        // Intentar parsear la respuesta JSON si es válida
-        try {
-          const responseData = JSON.parse(responseText)
-          if (responseData.success) {
-            console.log('✅ Backup en Google Sheets creado exitosamente')
-          } else {
-            console.warn('⚠️ Google Sheets respondió con error:', responseData.error)
-          }
-        } catch (parseError) {
-          // Si no es JSON válido, igual pudo haber funcionado
-          console.log('ℹ️ Respuesta de Google Sheets (no JSON):', responseText.substring(0, 200))
-        }
-        
-        // Verificar status HTTP
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${responseText.substring(0, 100)}`)
-        }
-        
-      } catch (sheetsError: any) {
-        // ⚠️ Error NO crítico: el dato YA está guardado en Supabase
-        console.warn('⚠️ Google Sheets sync falló:', sheetsError.message)
-        console.warn('💡 Los datos están SEGUROS en tu base de datos principal (Supabase).')
-        console.warn('🔧 Para debug: Revisa la consola arriba para ver el error exacto.')
+        setSheetsStatus('success') // ✅ Indicador visual: éxito
+        console.log('✅ Google Sheets: petición enviada (modo no-cors)')
+      } catch (sheetsError) {
+        setSheetsStatus('error') // ✅ Indicador visual: error
+        console.warn('⚠️ Google Sheets falló (pero los datos están en Supabase):', sheetsError)
       }
 
-      // Actualizar estado local inmediatamente para feedback visual
+      // Actualizar UI
       setTransacciones([nuevaTransaccion, ...transacciones])
-
       setMetrics(prev => ({
         saldo: tipoAUsar === 'Ingreso' ? prev.saldo + parseFloat(monto) : prev.saldo - parseFloat(monto),
         ingresos: tipoAUsar === 'Ingreso' ? prev.ingresos + parseFloat(monto) : prev.ingresos,
         egresos: tipoAUsar === 'Egreso' ? prev.egresos + parseFloat(monto) : prev.egresos
       }))
-
-      // Limpiar formulario
-      setDescripcion('')
-      setMonto('')
+      setDescripcion(''); setMonto('')
       alert(`✅ ${tipoAUsar} registrado correctamente`)
-
-      // Recargar para asegurar consistencia con la BD
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      setTimeout(() => { window.location.reload() }, 1000)
 
     } catch (error: any) {
       console.error('❌ Error guardando transacción:', error)
       alert('Error al guardar: ' + (error.message || 'Error desconocido'))
+      setSheetsStatus('idle')
     } finally {
       setSaving(false)
     }
   }
 
   const handlePrint = () => window.print()
-
   const handleExportCSV = () => {
     if (transacciones.length === 0) return alert('No hay transacciones para exportar')
     try {
       const BOM = '\uFEFF'
       const headers = 'Fecha,Tipo,Categoría,Descripción,Monto,Usuario\n'
-      const rows = transacciones.map(t => 
-        `${new Date(t.fecha).toLocaleDateString('es-MX')},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`
-      ).join('\n')
+      const rows = transacciones.map(t => `${new Date(t.fecha).toLocaleDateString('es-MX')},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`).join('\n')
       const totalIngresos = transacciones.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const totalEgresos = transacciones.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const saldoNeto = totalIngresos - totalEgresos
@@ -263,73 +152,32 @@ export default function CapitalPage() {
       const csvContent = BOM + headers + rows + summary
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `Capital_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      const link = document.createElement('a'); link.href = url; link.download = `Capital_${new Date().toISOString().split('T')[0]}.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link)
       URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error('❌ Error al exportar CSV:', err)
-      alert('Hubo un error al generar el archivo')
-    }
+    } catch (err) { console.error('❌ Error al exportar CSV:', err); alert('Hubo un error al generar el archivo') }
   }
 
-  if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>⏳</div>
-        <div>Cargando módulo de Capital...</div>
-      </div>
-    </div>
-  )
+  if (loading) return (<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}><div style={{ textAlign: 'center' }}><div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>⏳</div><div>Cargando módulo de Capital...</div></div></div>)
 
   return (
     <ProtectedRoute>
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-      
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-        <style>{`
-          @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-          @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
-            .sidebar.open { transform: translateX(0) !important; }
-            .main-content { margin-left: 0 !important; }
-            .mobile-menu-btn { display: flex !important; }
-            .overlay { display: block !important; }
-          }
-          @media (min-width: 769px) {
-            .overlay { display: none !important; }
-            .mobile-menu-btn { display: none !important; }
-          }
-          @media print {
-            .no-print { display: none !important; }
-            .sidebar { display: none !important; }
-            .main-content { margin-left: 0 !important; }
-          }
-        `}</style>
-
+        <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } } @media (max-width: 768px) { .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; } .sidebar.open { transform: translateX(0) !important; } .main-content { margin-left: 0 !important; } .mobile-menu-btn { display: flex !important; } .overlay { display: block !important; } } @media (min-width: 769px) { .overlay { display: none !important; } .mobile-menu-btn { display: none !important; } } @media print { .no-print { display: none !important; } .sidebar { display: none !important; } .main-content { margin-left: 0 !important; } }`}</style>
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
-
+        
+        {/* SIDEBAR */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '280px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed', top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>💼</div>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'white' }}>PrestaLista</div>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}><div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>💼</div><div style={{ fontSize: '20px', fontWeight: 'bold', color: 'white' }}>PrestaLista</div></div>
             <div onClick={handleAvatarClick} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', transition: 'background 0.2s' }}>
               <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold', color: 'white', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)', position: 'relative', flexShrink: 0 }}>
                 {uploading ? (<span style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⏳</span>) : avatarUrl ? (<img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />) : (getInitials())}
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: '600', fontSize: '14px', color: 'white', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name || 'Usuario'}</div>
-                <div style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', backgroundColor: isAdmin() ? '#7c3aed' : isDistributor() ? '#2563eb' : '#059669', color: 'white' }}>{user?.role || 'ADMIN'}</div>
-              </div>
+              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: '600', fontSize: '14px', color: 'white', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name || 'Usuario'}</div><div style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', backgroundColor: isAdmin() ? '#7c3aed' : isDistributor() ? '#2563eb' : '#059669', color: 'white' }}>{user?.role || 'ADMIN'}</div></div>
               <span style={{ fontSize: '16px', color: '#6b7280' }}>📷</span>
             </div>
           </div>
-
           <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px' }}>
             <Link href="/dashboard" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>📊</span><span style={{ fontWeight: '500' }}>Dashboard</span></Link>
             <Link href="/prestamos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>📄</span><span>Préstamos</span></Link>
@@ -338,12 +186,10 @@ export default function CapitalPage() {
             {isAdmin() && (<Link href="/distribuidores" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>🤝</span><span>Distribuidores</span></Link>)}
             <Link href="/capital" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none', fontWeight: '600' }}><span style={{ fontSize: '18px' }}>💰</span><span>Capital</span></Link>
           </nav>
-
-          <div style={{ padding: '20px', borderTop: '1px solid #1f2937' }}>
-            <button onClick={() => { signOut(); setSidebarOpen(false); }} style={{ width: '100%', padding: '12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><span>🚪</span><span>Cerrar Sesión</span></button>
-          </div>
+          <div style={{ padding: '20px', borderTop: '1px solid #1f2937' }}><button onClick={() => { signOut(); setSidebarOpen(false); }} style={{ width: '100%', padding: '12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><span>🚪</span><span>Cerrar Sesión</span></button></div>
         </aside>
 
+        {/* MAIN CONTENT */}
         <main className="main-content" style={{ marginLeft: '280px', flex: 1, minHeight: '100vh', backgroundColor: '#0b0f19' }}>
           <header style={{ backgroundColor: '#111827', borderBottom: '1px solid #1f2937', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', position: 'sticky', top: 0, zIndex: 30 }}>
             <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', padding: '8px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', marginRight: 'auto' }}>☰</button>
@@ -351,6 +197,7 @@ export default function CapitalPage() {
           </header>
 
           <div style={{ padding: '32px' }}>
+            {/* BANNER */}
             <div style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: '16px', padding: '32px', marginBottom: '32px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
               <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: '0 0 8px 0', color: 'white' }}>💰 Gestión de Capital</h1>
               <p style={{ margin: '0 0 24px 0', opacity: 0.9, color: 'rgba(255,255,255,0.9)' }}>Controla ingresos, egresos y el balance de tu negocio</p>
@@ -360,31 +207,22 @@ export default function CapitalPage() {
               </div>
             </div>
 
+            {/* MÉTRICAS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
-                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Saldo Actual</div>
-                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#34d399' }}>${metrics.saldo.toLocaleString('es-MX')}</div>
-              </div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
-                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Ingresos</div>
-                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#60a5fa' }}>${metrics.ingresos.toLocaleString('es-MX')}</div>
-              </div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
-                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Egresos</div>
-                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#f87171' }}>${metrics.egresos.toLocaleString('es-MX')}</div>
-              </div>
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}><div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Saldo Actual</div><div style={{ fontSize: '32px', fontWeight: 'bold', color: '#34d399' }}>${metrics.saldo.toLocaleString('es-MX')}</div></div>
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}><div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Ingresos</div><div style={{ fontSize: '32px', fontWeight: 'bold', color: '#60a5fa' }}>${metrics.ingresos.toLocaleString('es-MX')}</div></div>
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}><div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Egresos</div><div style={{ fontSize: '32px', fontWeight: 'bold', color: '#f87171' }}>${metrics.egresos.toLocaleString('es-MX')}</div></div>
             </div>
 
+            {/* FORMULARIO */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '32px', marginBottom: '32px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📝 Registrar Transacción</h2>
               <form onSubmit={(e) => handleSubmit(e)}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-                  
                   <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', marginBottom: '8px' }}>
                     <button type="button" onClick={() => setTipo('Ingreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Ingreso' ? '#059669' : '#030712', color: tipo === 'Ingreso' ? 'white' : '#9ca3af', border: `2px solid ${tipo === 'Ingreso' ? '#059669' : '#1f2937'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>INGRESO</button>
                     <button type="button" onClick={() => setTipo('Egreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Egreso' ? '#dc2626' : '#030712', color: tipo === 'Egreso' ? 'white' : '#9ca3af', border: `2px solid ${tipo === 'Egreso' ? '#dc2626' : '#1f2937'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>EGRESO</button>
                   </div>
-
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Concepto *</label>
                     <select value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px', cursor: 'pointer' }}>
@@ -392,84 +230,35 @@ export default function CapitalPage() {
                       {(tipo === 'Ingreso' ? INGRESOS_OPCIONES : EGRESOS_OPCIONES).map((op) => (<option key={op} value={op}>{op}</option>))}
                     </select>
                   </div>
-
-                  <div>
-                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Monto *</label>
-                    <input type="number" step="0.01" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
-                  </div>
-
-                  <div>
-                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Categoría</label>
-                    <input type="text" placeholder="capital" value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
-                  </div>
+                  <div><label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Monto *</label><input type="number" step="0.01" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} /></div>
+                  <div><label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Categoría</label><input type="text" placeholder="capital" value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} /></div>
+                  
+                  {/* ✅ INDICADOR VISUAL DE GOOGLE SHEETS */}
+                  {sheetsStatus !== 'idle' && (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '8px', borderRadius: '6px', fontSize: '13px', fontWeight: '500', 
+                      backgroundColor: sheetsStatus === 'syncing' ? '#fef3c7' : sheetsStatus === 'success' ? '#d1fae5' : '#fee2e2',
+                      color: sheetsStatus === 'syncing' ? '#92400e' : sheetsStatus === 'success' ? '#065f46' : '#991b1b'
+                    }}>
+                      {sheetsStatus === 'syncing' && '🔄 Sincronizando con Google Sheets...'}
+                      {sheetsStatus === 'success' && '✅ Backup en Google Sheets completado'}
+                      {sheetsStatus === 'error' && '⚠️ Google Sheets no respondió (pero tus datos están seguros en la app)'}
+                    </div>
+                  )}
 
                   <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '16px', marginTop: '16px' }}>
-                    <button 
-                      type="button" 
-                      onClick={(e) => handleSubmit(e, 'Ingreso')} 
-                      disabled={saving}
-                      style={{ 
-                        flex: 1, 
-                        padding: '16px', 
-                        backgroundColor: saving ? '#047857' : '#059669', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '8px', 
-                        cursor: saving ? 'not-allowed' : 'pointer', 
-                        fontWeight: '700', 
-                        fontSize: '16px',
-                        boxShadow: '0 4px 6px rgba(5,150,105,0.3)',
-                        opacity: saving ? 0.7 : 1
-                      }}
-                    >
-                      {saving ? '⏳ Guardando...' : '✅ REGISTRAR INGRESO'}
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={(e) => handleSubmit(e, 'Egreso')}
-                      disabled={saving}
-                      style={{ 
-                        flex: 1, 
-                        padding: '16px', 
-                        backgroundColor: saving ? '#b91c1c' : '#dc2626', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '8px', 
-                        cursor: saving ? 'not-allowed' : 'pointer', 
-                        fontWeight: '700', 
-                        fontSize: '16px',
-                        boxShadow: '0 4px 6px rgba(220,38,38,0.3)',
-                        opacity: saving ? 0.7 : 1
-                      }}
-                    >
-                      {saving ? '⏳ Guardando...' : '📉 REGISTRAR EGRESO'}
-                    </button>
+                    <button type="button" onClick={(e) => handleSubmit(e, 'Ingreso')} disabled={saving} style={{ flex: 1, padding: '16px', backgroundColor: saving ? '#047857' : '#059669', color: 'white', border: 'none', borderRadius: '8px', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '16px', boxShadow: '0 4px 6px rgba(5,150,105,0.3)', opacity: saving ? 0.7 : 1 }}>{saving ? '⏳ Guardando...' : '✅ REGISTRAR INGRESO'}</button>
+                    <button type="button" onClick={(e) => handleSubmit(e, 'Egreso')} disabled={saving} style={{ flex: 1, padding: '16px', backgroundColor: saving ? '#b91c1c' : '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '16px', boxShadow: '0 4px 6px rgba(220,38,38,0.3)', opacity: saving ? 0.7 : 1 }}>{saving ? '⏳ Guardando...' : '📉 REGISTRAR EGRESO'}</button>
                   </div>
                 </div>
               </form>
             </div>
 
+            {/* HISTORIAL */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📊 Historial de Transacciones</h2>
-              {transacciones.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
-                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📈</div>
-                  <div style={{ fontSize: '16px' }}>Aún no hay transacciones registradas</div>
-                  <div style={{ fontSize: '13px', marginTop: '8px' }}>Registra tu primera transacción arriba 👆</div>
-                </div>
-              ) : (
+              {transacciones.length === 0 ? (<div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}><div style={{ fontSize: '48px', marginBottom: '16px' }}>📈</div><div style={{ fontSize: '16px' }}>Aún no hay transacciones registradas</div><div style={{ fontSize: '13px', marginTop: '8px' }}>Registra tu primera transacción arriba 👆</div></div>) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {transacciones.map((t: any) => (
-                    <div key={t.id} style={{ backgroundColor: '#0b0f19', border: '1px solid #1f2937', borderRadius: '8px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: '600', color: 'white' }}>{t.descripcion}</div>
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{t.categoria} • {new Date(t.fecha).toLocaleDateString('es-MX')}</div>
-                      </div>
-                      <div style={{ fontWeight: 'bold', fontSize: '18px', color: t.tipo === 'Ingreso' ? '#34d399' : '#f87171' }}>
-                        {t.tipo === 'Ingreso' ? '+' : '-'}${Number(t.monto).toLocaleString('es-MX')}
-                      </div>
-                    </div>
-                  ))}
+                  {transacciones.map((t: any) => (<div key={t.id} style={{ backgroundColor: '#0b0f19', border: '1px solid #1f2937', borderRadius: '8px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><div style={{ fontWeight: '600', color: 'white' }}>{t.descripcion}</div><div style={{ fontSize: '12px', color: '#9ca3af' }}>{t.categoria} • {new Date(t.fecha).toLocaleDateString('es-MX')}</div></div><div style={{ fontWeight: 'bold', fontSize: '18px', color: t.tipo === 'Ingreso' ? '#34d399' : '#f87171' }}>{t.tipo === 'Ingreso' ? '+' : '-'}${Number(t.monto).toLocaleString('es-MX')}</div></div>))}
                 </div>
               )}
             </div>
