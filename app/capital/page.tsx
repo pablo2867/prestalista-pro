@@ -3,12 +3,10 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useAuth } from '../lib/AuthContext'
-import { useGlobalContext } from '../lib/GlobalContext'
 import { supabase } from '../lib/supabaseClient'
 import ProtectedRoute from '../lib/ProtectedRoute'
 import NotificationsBell from '../components/NotificationsBell'
 
-// ✅ LISTAS PREDEFINIDAS
 const INGRESOS_OPCIONES = [
   'Venta de producto',
   'Cobro de préstamo',
@@ -35,13 +33,10 @@ export default function CapitalPage() {
   const { user, signOut, isAdmin, isDistributor } = useAuth()
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  
-  // Estados para el avatar
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Estados para Capital
   const [tipo, setTipo] = useState<'Ingreso' | 'Egreso'>('Ingreso')
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState('')
@@ -49,7 +44,6 @@ export default function CapitalPage() {
   const [transacciones, setTransacciones] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ saldo: 0, ingresos: 0, egresos: 0 })
 
-  // Cargar datos y Avatar
   useEffect(() => { 
     const initPage = async () => {
       try {
@@ -66,7 +60,6 @@ export default function CapitalPage() {
     initPage()
   }, [user?.id])
 
-  // Lógica de subida de avatar
   const handleAvatarClick = () => fileInputRef.current?.click()
   
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,13 +98,15 @@ export default function CapitalPage() {
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, tipoForzado?: 'Ingreso' | 'Egreso') => {
     e.preventDefault()
-    if (!descripcion || !monto) return alert('Completa descripción y monto')
+    if (!descripcion || !monto) return alert('Completa concepto y monto')
+    
+    const tipoAUsar = tipoForzado || tipo
     
     const nuevaTransaccion = {
       id: Date.now(),
-      tipo,
+      tipo: tipoAUsar,
       descripcion,
       monto: parseFloat(monto),
       categoria,
@@ -121,38 +116,30 @@ export default function CapitalPage() {
     setTransacciones([nuevaTransaccion, ...transacciones])
     
     setMetrics(prev => ({
-      saldo: tipo === 'Ingreso' ? prev.saldo + nuevaTransaccion.monto : prev.saldo - nuevaTransaccion.monto,
-      ingresos: tipo === 'Ingreso' ? prev.ingresos + nuevaTransaccion.monto : prev.ingresos,
-      egresos: tipo === 'Egreso' ? prev.egresos + nuevaTransaccion.monto : prev.egresos
+      saldo: tipoAUsar === 'Ingreso' ? prev.saldo + nuevaTransaccion.monto : prev.saldo - nuevaTransaccion.monto,
+      ingresos: tipoAUsar === 'Ingreso' ? prev.ingresos + nuevaTransaccion.monto : prev.ingresos,
+      egresos: tipoAUsar === 'Egreso' ? prev.egresos + nuevaTransaccion.monto : prev.egresos
     }))
     
     setDescripcion('')
     setMonto('')
-    alert(`✅ ${tipo} registrado correctamente`)
+    alert(`✅ ${tipoAUsar} registrado correctamente`)
   }
 
   const handlePrint = () => window.print()
 
   const handleExportCSV = () => {
-    if (transacciones.length === 0) {
-      alert('No hay transacciones para exportar')
-      return
-    }
-
+    if (transacciones.length === 0) return alert('No hay transacciones para exportar')
     try {
       const BOM = '\uFEFF'
       const headers = 'Fecha,Tipo,Categoría,Descripción,Monto,Usuario\n'
-      
       const rows = transacciones.map(t => 
         `${t.fecha},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`
       ).join('\n')
-      
       const totalIngresos = transacciones.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const totalEgresos = transacciones.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const saldoNeto = totalIngresos - totalEgresos
-      
       const summary = `\n\n=== RESUMEN ===\nTotal Ingresos: $${totalIngresos.toFixed(2)}\nTotal Egresos: $${totalEgresos.toFixed(2)}\nSaldo Neto: $${saldoNeto.toFixed(2)}\nRegistros: ${transacciones.length}`
-      
       const csvContent = BOM + headers + rows + summary
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
@@ -183,7 +170,6 @@ export default function CapitalPage() {
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
       
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-        
         <style>{`
           @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
           @media (max-width: 768px) {
@@ -206,7 +192,6 @@ export default function CapitalPage() {
 
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
 
-        {/* SIDEBAR */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '280px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed', top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
@@ -215,13 +200,7 @@ export default function CapitalPage() {
             </div>
             <div onClick={handleAvatarClick} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', transition: 'background 0.2s' }}>
               <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold', color: 'white', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)', position: 'relative', flexShrink: 0 }}>
-                {uploading ? (
-                  <span style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⏳</span>
-                ) : avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  getInitials()
-                )}
+                {uploading ? (<span style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⏳</span>) : avatarUrl ? (<img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />) : (getInitials())}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: '600', fontSize: '14px', color: 'white', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name || 'Usuario'}</div>
@@ -245,16 +224,13 @@ export default function CapitalPage() {
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
         <main className="main-content" style={{ marginLeft: '280px', flex: 1, minHeight: '100vh', backgroundColor: '#0b0f19' }}>
-          {/* HEADER */}
           <header style={{ backgroundColor: '#111827', borderBottom: '1px solid #1f2937', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', position: 'sticky', top: 0, zIndex: 30 }}>
             <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', padding: '8px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', marginRight: 'auto' }}>☰</button>
             <NotificationsBell />
           </header>
 
           <div style={{ padding: '32px' }}>
-            {/* BANNER */}
             <div style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: '16px', padding: '32px', marginBottom: '32px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
               <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: '0 0 8px 0', color: 'white' }}>💰 Gestión de Capital</h1>
               <p style={{ margin: '0 0 24px 0', opacity: 0.9, color: 'rgba(255,255,255,0.9)' }}>Controla ingresos, egresos y el balance de tu negocio</p>
@@ -264,7 +240,6 @@ export default function CapitalPage() {
               </div>
             </div>
 
-            {/* MÉTRICAS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
               <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
                 <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Saldo Actual</div>
@@ -280,124 +255,44 @@ export default function CapitalPage() {
               </div>
             </div>
 
-            {/* FORMULARIO CON BOTONES SEPARADOS Y LISTAS */}
+            {/* FORMULARIO CON DOS BOTONES DE REGISTRO SEPARADOS */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '32px', marginBottom: '32px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📝 Registrar Transacción</h2>
-              <form onSubmit={handleSubmit}>
+              <form onSubmit={(e) => handleSubmit(e)}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
                   
-                  {/* BOTONES SEPARADOS: INGRESO (VERDE) / EGRESO (ROJO) */}
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
-                    <button 
-                      type="button" 
-                      onClick={() => { setTipo('Ingreso'); setDescripcion('') }} 
-                      style={{ 
-                        flex: 1, 
-                        padding: '14px', 
-                        backgroundColor: tipo === 'Ingreso' ? '#059669' : '#030712', 
-                        color: tipo === 'Ingreso' ? 'white' : '#9ca3af', 
-                        border: `2px solid ${tipo === 'Ingreso' ? '#059669' : '#1f2937'}`, 
-                        borderRadius: '8px', 
-                        cursor: 'pointer', 
-                        fontWeight: '700',
-                        fontSize: '16px',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      ✅ INGRESO
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => { setTipo('Egreso'); setDescripcion('') }} 
-                      style={{ 
-                        flex: 1, 
-                        padding: '14px', 
-                        backgroundColor: tipo === 'Egreso' ? '#dc2626' : '#030712', 
-                        color: tipo === 'Egreso' ? 'white' : '#9ca3af', 
-                        border: `2px solid ${tipo === 'Egreso' ? '#dc2626' : '#1f2937'}`, 
-                        borderRadius: '8px', 
-                        cursor: 'pointer', 
-                        fontWeight: '700',
-                        fontSize: '16px',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      📉 EGRESO
-                    </button>
+                  {/* SELECTOR DE TIPO */}
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', marginBottom: '8px' }}>
+                    <button type="button" onClick={() => setTipo('Ingreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Ingreso' ? '#059669' : '#030712', color: tipo === 'Ingreso' ? 'white' : '#9ca3af', border: `2px solid ${tipo === 'Ingreso' ? '#059669' : '#1f2937'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>INGRESO</button>
+                    <button type="button" onClick={() => setTipo('Egreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Egreso' ? '#dc2626' : '#030712', color: tipo === 'Egreso' ? 'white' : '#9ca3af', border: `2px solid ${tipo === 'Egreso' ? '#dc2626' : '#1f2937'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>EGRESO</button>
                   </div>
 
-                  {/* SELECT CON LISTA PREDEFINIDA */}
+                  {/* CONCEPTO */}
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
-                      Concepto * (Selecciona de la lista)
-                    </label>
-                    <select 
-                      value={descripcion} 
-                      onChange={(e) => setDescripcion(e.target.value)} 
-                      required 
-                      style={{ 
-                        width: '100%', 
-                        padding: '12px', 
-                        backgroundColor: '#030712', 
-                        border: '1px solid #1f2937', 
-                        borderRadius: '8px', 
-                        color: 'white', 
-                        fontSize: '14px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <option value="">-- Selecciona un concepto --</option>
-                      {(tipo === 'Ingreso' ? INGRESOS_OPCIONES : EGRESOS_OPCIONES).map((opcion) => (
-                        <option key={opcion} value={opcion}>{opcion}</option>
-                      ))}
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Concepto *</label>
+                    <select value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px', cursor: 'pointer' }}>
+                      <option value="">-- Selecciona --</option>
+                      {(tipo === 'Ingreso' ? INGRESOS_OPCIONES : EGRESOS_OPCIONES).map((op) => (<option key={op} value={op}>{op}</option>))}
                     </select>
                   </div>
 
                   {/* MONTO */}
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Monto *</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      placeholder="0.00" 
-                      value={monto} 
-                      onChange={(e) => setMonto(e.target.value)} 
-                      required 
-                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} 
-                    />
+                    <input type="number" step="0.01" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
                   </div>
 
-                  {/* CATEGORÍA (opcional) */}
+                  {/* CATEGORÍA */}
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Categoría</label>
-                    <input 
-                      type="text" 
-                      placeholder="Ej: capital, gastos, inversiones" 
-                      value={categoria} 
-                      onChange={(e) => setCategoria(e.target.value)} 
-                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} 
-                    />
+                    <input type="text" placeholder="capital" value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
                   </div>
-                </div>
 
-                <div style={{ marginTop: '24px' }}>
-                  <button 
-                    type="submit" 
-                    style={{ 
-                      width: '100%', 
-                      padding: '16px', 
-                      background: tipo === 'Ingreso' ? 'linear-gradient(135deg, #059669, #10b981)' : 'linear-gradient(135deg, #dc2626, #ef4444)', 
-                      color: 'white', 
-                      border: 'none', 
-                      borderRadius: '8px', 
-                      cursor: 'pointer', 
-                      fontWeight: '700', 
-                      fontSize: '16px',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.2)'
-                    }}
-                  >
-                    {tipo === 'Ingreso' ? '✅' : '📉'} Registrar {tipo}
-                  </button>
+                  {/* DOS BOTONES DE REGISTRO SEPARADOS */}
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '16px', marginTop: '16px' }}>
+                    <button type="button" onClick={(e) => handleSubmit(e, 'Ingreso')} style={{ flex: 1, padding: '16px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '16px', boxShadow: '0 4px 6px rgba(5,150,105,0.3)' }}>✅ REGISTRAR INGRESO</button>
+                    <button type="button" onClick={(e) => handleSubmit(e, 'Egreso')} style={{ flex: 1, padding: '16px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '16px', boxShadow: '0 4px 6px rgba(220,38,38,0.3)' }}>📉 REGISTRAR EGRESO</button>
+                  </div>
                 </div>
               </form>
             </div>
