@@ -43,16 +43,49 @@ export default function CapitalPage() {
   const [categoria, setCategoria] = useState('capital')
   const [transacciones, setTransacciones] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ saldo: 0, ingresos: 0, egresos: 0 })
+  const [saving, setSaving] = useState(false)
 
+  // ✅ Cargar transacciones desde Supabase
   useEffect(() => { 
     const initPage = async () => {
       try {
         if (user?.id) {
-          const { data } = await supabase.from('user_profiles').select('avatar_url').eq('id', user.id).single()
-          if (data?.avatar_url) setAvatarUrl(data.avatar_url)
+          // Cargar avatar
+          const { data: profileData } = await supabase
+            .from('user_profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single()
+          if (profileData?.avatar_url) setAvatarUrl(profileData.avatar_url)
+
+          // Cargar transacciones
+          const { data: transData, error: transError } = await supabase
+            .from('transacciones_capital')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('fecha', { ascending: false })
+
+          if (transError) throw transError
+
+          const trans = transData || []
+          setTransacciones(trans)
+
+          // Calcular métricas
+          const ingresos = trans
+            .filter(t => t.tipo === 'Ingreso')
+            .reduce((sum, t) => sum + (t.monto || 0), 0)
+          const egresos = trans
+            .filter(t => t.tipo === 'Egreso')
+            .reduce((sum, t) => sum + (t.monto || 0), 0)
+
+          setMetrics({
+            saldo: ingresos - egresos,
+            ingresos,
+            egresos
+          })
         }
       } catch (error) {
-        console.error('❌ Error cargando avatar:', error)
+        console.error('❌ Error cargando datos:', error)
       } finally {
         setLoading(false)
       }
@@ -70,7 +103,9 @@ export default function CapitalPage() {
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true, cacheControl: '3600' })
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true, cacheControl: '3600' })
       if (uploadError) throw uploadError
       
       const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
@@ -98,32 +133,56 @@ export default function CapitalPage() {
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
+  // ✅ Guardar en Supabase
   const handleSubmit = async (e: React.FormEvent, tipoForzado?: 'Ingreso' | 'Egreso') => {
     e.preventDefault()
     if (!descripcion || !monto) return alert('Completa concepto y monto')
-    
+    if (!user?.id) return alert('Debes estar logueado')
+
     const tipoAUsar = tipoForzado || tipo
-    
-    const nuevaTransaccion = {
-      id: Date.now(),
-      tipo: tipoAUsar,
-      descripcion,
-      monto: parseFloat(monto),
-      categoria,
-      fecha: new Date().toISOString()
+    setSaving(true)
+
+    try {
+      const nuevaTransaccion = {
+        user_id: user.id,
+        tipo: tipoAUsar,
+        descripcion,
+        monto: parseFloat(monto),
+        categoria,
+        fecha: new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from('transacciones_capital')
+        .insert([nuevaTransaccion])
+
+      if (error) throw error
+
+      // Actualizar estado local inmediatamente
+      const transaccionConId = { ...nuevaTransaccion, id: Date.now() }
+      setTransacciones([transaccionConId, ...transacciones])
+
+      setMetrics(prev => ({
+        saldo: tipoAUsar === 'Ingreso' ? prev.saldo + parseFloat(monto) : prev.saldo - parseFloat(monto),
+        ingresos: tipoAUsar === 'Ingreso' ? prev.ingresos + parseFloat(monto) : prev.ingresos,
+        egresos: tipoAUsar === 'Egreso' ? prev.egresos + parseFloat(monto) : prev.egresos
+      }))
+
+      setDescripcion('')
+      setMonto('')
+      alert(`✅ ${tipoAUsar} registrado correctamente`)
+
+      // Recargar datos desde Supabase para asegurar consistencia
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+
+    } catch (error: any) {
+      console.error('❌ Error guardando transacción:', error)
+      alert('Error al guardar: ' + error.message)
+    } finally {
+      setSaving(false)
     }
-    
-    setTransacciones([nuevaTransaccion, ...transacciones])
-    
-    setMetrics(prev => ({
-      saldo: tipoAUsar === 'Ingreso' ? prev.saldo + nuevaTransaccion.monto : prev.saldo - nuevaTransaccion.monto,
-      ingresos: tipoAUsar === 'Ingreso' ? prev.ingresos + nuevaTransaccion.monto : prev.ingresos,
-      egresos: tipoAUsar === 'Egreso' ? prev.egresos + nuevaTransaccion.monto : prev.egresos
-    }))
-    
-    setDescripcion('')
-    setMonto('')
-    alert(`✅ ${tipoAUsar} registrado correctamente`)
   }
 
   const handlePrint = () => window.print()
@@ -134,7 +193,7 @@ export default function CapitalPage() {
       const BOM = '\uFEFF'
       const headers = 'Fecha,Tipo,Categoría,Descripción,Monto,Usuario\n'
       const rows = transacciones.map(t => 
-        `${t.fecha},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`
+        `${new Date(t.fecha).toLocaleDateString('es-MX')},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`
       ).join('\n')
       const totalIngresos = transacciones.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const totalEgresos = transacciones.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
@@ -255,19 +314,16 @@ export default function CapitalPage() {
               </div>
             </div>
 
-            {/* FORMULARIO CON DOS BOTONES DE REGISTRO SEPARADOS */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '32px', marginBottom: '32px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📝 Registrar Transacción</h2>
               <form onSubmit={(e) => handleSubmit(e)}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
                   
-                  {/* SELECTOR DE TIPO */}
                   <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px', marginBottom: '8px' }}>
                     <button type="button" onClick={() => setTipo('Ingreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Ingreso' ? '#059669' : '#030712', color: tipo === 'Ingreso' ? 'white' : '#9ca3af', border: `2px solid ${tipo === 'Ingreso' ? '#059669' : '#1f2937'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>INGRESO</button>
                     <button type="button" onClick={() => setTipo('Egreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Egreso' ? '#dc2626' : '#030712', color: tipo === 'Egreso' ? 'white' : '#9ca3af', border: `2px solid ${tipo === 'Egreso' ? '#dc2626' : '#1f2937'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>EGRESO</button>
                   </div>
 
-                  {/* CONCEPTO */}
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Concepto *</label>
                     <select value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px', cursor: 'pointer' }}>
@@ -276,28 +332,62 @@ export default function CapitalPage() {
                     </select>
                   </div>
 
-                  {/* MONTO */}
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Monto *</label>
                     <input type="number" step="0.01" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
                   </div>
 
-                  {/* CATEGORÍA */}
                   <div>
                     <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Categoría</label>
                     <input type="text" placeholder="capital" value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} />
                   </div>
 
-                  {/* DOS BOTONES DE REGISTRO SEPARADOS */}
                   <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '16px', marginTop: '16px' }}>
-                    <button type="button" onClick={(e) => handleSubmit(e, 'Ingreso')} style={{ flex: 1, padding: '16px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '16px', boxShadow: '0 4px 6px rgba(5,150,105,0.3)' }}>✅ REGISTRAR INGRESO</button>
-                    <button type="button" onClick={(e) => handleSubmit(e, 'Egreso')} style={{ flex: 1, padding: '16px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '16px', boxShadow: '0 4px 6px rgba(220,38,38,0.3)' }}>📉 REGISTRAR EGRESO</button>
+                    <button 
+                      type="button" 
+                      onClick={(e) => handleSubmit(e, 'Ingreso')} 
+                      disabled={saving}
+                      style={{ 
+                        flex: 1, 
+                        padding: '16px', 
+                        backgroundColor: saving ? '#047857' : '#059669', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '8px', 
+                        cursor: saving ? 'not-allowed' : 'pointer', 
+                        fontWeight: '700', 
+                        fontSize: '16px',
+                        boxShadow: '0 4px 6px rgba(5,150,105,0.3)',
+                        opacity: saving ? 0.7 : 1
+                      }}
+                    >
+                      {saving ? '⏳ Guardando...' : '✅ REGISTRAR INGRESO'}
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={(e) => handleSubmit(e, 'Egreso')}
+                      disabled={saving}
+                      style={{ 
+                        flex: 1, 
+                        padding: '16px', 
+                        backgroundColor: saving ? '#b91c1c' : '#dc2626', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '8px', 
+                        cursor: saving ? 'not-allowed' : 'pointer', 
+                        fontWeight: '700', 
+                        fontSize: '16px',
+                        boxShadow: '0 4px 6px rgba(220,38,38,0.3)',
+                        opacity: saving ? 0.7 : 1
+                      }}
+                    >
+                      {saving ? '⏳ Guardando...' : '📉 REGISTRAR EGRESO'}
+                    </button>
                   </div>
                 </div>
               </form>
             </div>
 
-            {/* HISTORIAL */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📊 Historial de Transacciones</h2>
               {transacciones.length === 0 ? (
