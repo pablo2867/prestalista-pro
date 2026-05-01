@@ -13,12 +13,12 @@ export default function CapitalPage() {
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   
-  // ✅ Estados para el avatar
+  // Estados para el avatar
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ✅ Estados para Capital
+  // Estados para Capital
   const [tipo, setTipo] = useState<'Ingreso' | 'Egreso'>('Ingreso')
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState('')
@@ -26,7 +26,7 @@ export default function CapitalPage() {
   const [transacciones, setTransacciones] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ saldo: 0, ingresos: 0, egresos: 0 })
 
-  // ✅ Cargar datos y Avatar
+  // Cargar datos y Avatar
   useEffect(() => { 
     const initPage = async () => {
       try {
@@ -37,13 +37,13 @@ export default function CapitalPage() {
       } catch (error) {
         console.error('❌ Error cargando avatar:', error)
       } finally {
-        setLoading(false)
+        setLoading(false) // ✅ CRÍTICO: Siempre detiene la carga
       }
     }
     initPage()
   }, [user?.id])
 
-  // ✅ Lógica de subida de avatar
+  // Lógica de subida de avatar
   const handleAvatarClick = () => fileInputRef.current?.click()
   
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,7 +66,7 @@ export default function CapitalPage() {
       })
       setAvatarUrl(data.publicUrl)
     } catch (err: any) {
-      console.error('❌ Error avatar:', err)
+      console.error(' Error avatar:', err)
       alert('Error al subir avatar: ' + err.message)
     } finally {
       setUploading(false)
@@ -105,25 +105,6 @@ export default function CapitalPage() {
       egresos: tipo === 'Egreso' ? prev.egresos + nuevaTransaccion.monto : prev.egresos
     }))
     
-    // ✅ SINCRONIZAR CON AIRTABLE (NUEVO)
-    try {
-      await fetch('/api/sync-airtable', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fecha: new Date().toLocaleDateString('es-MX'),
-          tipo: tipo,
-          descripcion: descripcion,
-          monto: monto,
-          usuario: user?.email || 'Admin'
-        })
-      })
-      console.log('✅ Enviado a Airtable')
-    } catch (e) {
-      console.error('⚠️ Airtable falló (no crítico):', e)
-      // No mostramos error al usuario para no interrumpir el flujo
-    }
-    
     // Reset form
     setDescripcion('')
     setMonto('')
@@ -132,7 +113,46 @@ export default function CapitalPage() {
 
   const handlePrint = () => window.print()
 
-  // ✅ Loading screen
+  // ✅ EXPORTACIÓN CSV MEJORADA (Segura y con totales)
+  const handleExportCSV = () => {
+    if (transacciones.length === 0) {
+      alert('No hay transacciones para exportar')
+      return
+    }
+
+    try {
+      // BOM para compatibilidad con Excel (evita caracteres raros)
+      const BOM = '\uFEFF'
+      const headers = 'Fecha,Tipo,Categoría,Descripción,Monto,Usuario\n'
+      
+      const rows = transacciones.map(t => 
+        `${t.fecha},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`
+      ).join('\n')
+      
+      // Cálculo de totales
+      const totalIngresos = transacciones.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
+      const totalEgresos = transacciones.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
+      const saldoNeto = totalIngresos - totalEgresos
+      
+      const summary = `\n\n=== RESUMEN ===\nTotal Ingresos: $${totalIngresos.toFixed(2)}\nTotal Egresos: $${totalEgresos.toFixed(2)}\nSaldo Neto: $${saldoNeto.toFixed(2)}\nRegistros: ${transacciones.length}`
+      
+      const csvContent = BOM + headers + rows + summary
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Capital_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error(' Error al exportar CSV:', err)
+      alert('Hubo un error al generar el archivo')
+    }
+  }
+
+  // Loading screen
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>
       <div style={{ textAlign: 'center' }}>
@@ -170,7 +190,7 @@ export default function CapitalPage() {
 
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
 
-        {/* ✅ SIDEBAR */}
+        {/* SIDEBAR */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '280px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed', top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
           <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
@@ -209,7 +229,7 @@ export default function CapitalPage() {
           </div>
         </aside>
 
-        {/* ✅ MAIN CONTENT */}
+        {/* MAIN CONTENT */}
         <main className="main-content" style={{ marginLeft: '280px', flex: 1, minHeight: '100vh', backgroundColor: '#0b0f19' }}>
           {/* HEADER */}
           <header style={{ backgroundColor: '#111827', borderBottom: '1px solid #1f2937', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', position: 'sticky', top: 0, zIndex: 30 }}>
@@ -224,13 +244,7 @@ export default function CapitalPage() {
               <p style={{ margin: '0 0 24px 0', opacity: 0.9, color: 'rgba(255,255,255,0.9)' }}>Controla ingresos, egresos y el balance de tu negocio</p>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={handlePrint} className="no-print" style={{ flex: 1, padding: '12px 24px', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', backdropFilter: 'blur(4px)' }}>🖨️ Imprimir</button>
-                <button onClick={() => {
-                  const csv = 'Fecha,Tipo,Descripción,Categoría,Monto\n' + 
-                    transacciones.map(t => `${new Date(t.fecha).toLocaleDateString('es-MX')},${t.tipo},${t.descripcion},${t.categoria},${t.monto}`).join('\n')
-                  const blob = new Blob([csv], { type: 'text/csv' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a'); a.href = url; a.download = 'capital.csv'; a.click()
-                }} className="no-print" style={{ flex: 1, padding: '12px 24px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>📥 Exportar CSV</button>
+                <button onClick={handleExportCSV} className="no-print" style={{ flex: 1, padding: '12px 24px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>📥 Exportar CSV (Excel)</button>
               </div>
             </div>
 
@@ -269,7 +283,7 @@ export default function CapitalPage() {
 
             {/* HISTORIAL */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
-              <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📊 Historial de Transacciones</h2>
+              <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}> Historial de Transacciones</h2>
               {transacciones.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>📈</div>
