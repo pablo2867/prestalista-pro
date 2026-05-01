@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient'
 import ProtectedRoute from '../lib/ProtectedRoute'
 import NotificationsBell from '../components/NotificationsBell'
 
+// ✅ LISTAS PREDEFINIDAS
 const INGRESOS_OPCIONES = [
   'Venta de producto',
   'Cobro de préstamo',
@@ -28,6 +29,9 @@ const EGRESOS_OPCIONES = [
   'Impuestos',
   'Otro gasto'
 ]
+
+// ✅ URL DE GOOGLE SHEETS WEBHOOK (Reemplaza con tu URL real)
+const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwG1NOvxloQyn-g1widdBX0exHo0HE_2TpDC9tXUnzxDsM480tMVnce356tHZ-xkGeMDA/exec'
 
 export default function CapitalPage() {
   const { user, signOut, isAdmin, isDistributor } = useAuth()
@@ -133,7 +137,7 @@ export default function CapitalPage() {
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
-  // ✅ Guardar en Supabase
+  // ✅ Guardar en Supabase + Google Sheets (Backup automático)
   const handleSubmit = async (e: React.FormEvent, tipoForzado?: 'Ingreso' | 'Egreso') => {
     e.preventDefault()
     if (!descripcion || !monto) return alert('Completa concepto y monto')
@@ -144,6 +148,7 @@ export default function CapitalPage() {
 
     try {
       const nuevaTransaccion = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `tx-${Date.now()}`,
         user_id: user.id,
         tipo: tipoAUsar,
         descripcion,
@@ -152,15 +157,38 @@ export default function CapitalPage() {
         fecha: new Date().toISOString()
       }
 
-      const { error } = await supabase
+      // 1️⃣ Guardar en Supabase (PRIMERO - esto es lo crítico)
+      const { error: supabaseError } = await supabase
         .from('transacciones_capital')
         .insert([nuevaTransaccion])
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      // Actualizar estado local inmediatamente
-      const transaccionConId = { ...nuevaTransaccion, id: Date.now() }
-      setTransacciones([transaccionConId, ...transacciones])
+      // 2️⃣ Enviar a Google Sheets (Backup automático - NO crítico)
+      try {
+        await fetch(GOOGLE_SHEETS_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // El Apps Script espera 'descripcion', no 'description'
+          body: JSON.stringify({
+            id: nuevaTransaccion.id,
+            fecha: nuevaTransaccion.fecha,
+            usuario: user?.email || 'Usuario',
+            tipo: tipoAUsar,
+            descripcion: descripcion,
+            monto: parseFloat(monto),
+            categoria: categoria
+          })
+        })
+        console.log('✅ Backup en Google Sheets creado')
+      } catch (sheetsError) {
+        // ⚠️ Si Google Sheets falla, NO interrumpimos el flujo
+        // El dato YA está guardado en Supabase, que es lo importante
+        console.warn('⚠️ Google Sheets no respondió (pero se guardó en BD):', sheetsError)
+      }
+
+      // Actualizar estado local inmediatamente para feedback visual
+      setTransacciones([nuevaTransaccion, ...transacciones])
 
       setMetrics(prev => ({
         saldo: tipoAUsar === 'Ingreso' ? prev.saldo + parseFloat(monto) : prev.saldo - parseFloat(monto),
@@ -168,18 +196,19 @@ export default function CapitalPage() {
         egresos: tipoAUsar === 'Egreso' ? prev.egresos + parseFloat(monto) : prev.egresos
       }))
 
+      // Limpiar formulario
       setDescripcion('')
       setMonto('')
       alert(`✅ ${tipoAUsar} registrado correctamente`)
 
-      // Recargar datos desde Supabase para asegurar consistencia
+      // Recargar para asegurar consistencia con la BD
       setTimeout(() => {
         window.location.reload()
       }, 1000)
 
     } catch (error: any) {
       console.error('❌ Error guardando transacción:', error)
-      alert('Error al guardar: ' + error.message)
+      alert('Error al guardar: ' + (error.message || 'Error desconocido'))
     } finally {
       setSaving(false)
     }
