@@ -9,7 +9,7 @@ export default function ReportesPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
 
-  // ✅ Simulación de datos para la vista (luego se conectará a Supabase)
+  // ✅ Datos de ejemplo (se conectarán a Supabase después)
   const stats = {
     totalIngresos: 0,
     totalEgresos: 0,
@@ -17,7 +17,7 @@ export default function ReportesPage() {
   }
 
   useEffect(() => {
-    // Aquí irá la carga de datos reales de Supabase en el futuro
+    // Aquí irá la carga de datos reales
     setLoading(false)
   }, [])
 
@@ -61,7 +61,7 @@ export default function ReportesPage() {
           </div>
 
           {/* Saldo */}
-          <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #1e40af)', padding: '24px', borderRadius: '16px', border: '1px solid '#3b82f6' }}>
+          <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #1e40af)', padding: '24px', borderRadius: '16px', border: '1px solid #3b82f6' }}>
             <div style={{ color: '#dbeafe', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>Saldo Neto</div>
             <div style={{ fontSize: '40px', fontWeight: 'bold', color: '#60a5fa' }}>${stats.saldo.toLocaleString('es-MX')}</div>
           </div>
@@ -72,7 +72,7 @@ export default function ReportesPage() {
           <h2 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '24px' }}>Detalle de Operaciones</h2>
           
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
-            <div style={{ fontSize: '64px', marginBottom: '24px' }}></div>
+            <div style={{ fontSize: '64px', marginBottom: '24px' }}>📊</div>
             <h3 style={{ fontSize: '20px', color: '#9ca3af', marginBottom: '12px' }}>Esperando conexión de datos</h3>
             <p style={{ maxWidth: '500px', margin: '0 auto' }}>
               Esta sección se llenará automáticamente cuando conectemos los reportes a la base de datos. 
