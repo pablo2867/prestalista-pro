@@ -8,6 +8,29 @@ import { supabase } from '../lib/supabaseClient'
 import ProtectedRoute from '../lib/ProtectedRoute'
 import NotificationsBell from '../components/NotificationsBell'
 
+// ✅ LISTAS PREDEFINIDAS
+const INGRESOS_OPCIONES = [
+  'Venta de producto',
+  'Cobro de préstamo',
+  'Inversión inicial',
+  'Aporte de socios',
+  'Intereses cobrados',
+  'Servicios prestados',
+  'Otro ingreso'
+]
+
+const EGRESOS_OPCIONES = [
+  'Compra de insumos',
+  'Compra de material',
+  'Pago de servicios (luz/agua/internet)',
+  'Salarios y comisiones',
+  'Alquiler',
+  'Publicidad y marketing',
+  'Mantenimiento',
+  'Impuestos',
+  'Otro gasto'
+]
+
 export default function CapitalPage() {
   const { user, signOut, isAdmin, isDistributor } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -37,7 +60,7 @@ export default function CapitalPage() {
       } catch (error) {
         console.error('❌ Error cargando avatar:', error)
       } finally {
-        setLoading(false) // ✅ CRÍTICO: Siempre detiene la carga
+        setLoading(false)
       }
     }
     initPage()
@@ -66,7 +89,7 @@ export default function CapitalPage() {
       })
       setAvatarUrl(data.publicUrl)
     } catch (err: any) {
-      console.error(' Error avatar:', err)
+      console.error('❌ Error avatar:', err)
       alert('Error al subir avatar: ' + err.message)
     } finally {
       setUploading(false)
@@ -86,7 +109,6 @@ export default function CapitalPage() {
     e.preventDefault()
     if (!descripcion || !monto) return alert('Completa descripción y monto')
     
-    // Crear transacción local
     const nuevaTransaccion = {
       id: Date.now(),
       tipo,
@@ -98,22 +120,19 @@ export default function CapitalPage() {
     
     setTransacciones([nuevaTransaccion, ...transacciones])
     
-    // Actualizar métricas
     setMetrics(prev => ({
       saldo: tipo === 'Ingreso' ? prev.saldo + nuevaTransaccion.monto : prev.saldo - nuevaTransaccion.monto,
       ingresos: tipo === 'Ingreso' ? prev.ingresos + nuevaTransaccion.monto : prev.ingresos,
       egresos: tipo === 'Egreso' ? prev.egresos + nuevaTransaccion.monto : prev.egresos
     }))
     
-    // Reset form
     setDescripcion('')
     setMonto('')
-    alert('✅ Transacción registrada')
+    alert(`✅ ${tipo} registrado correctamente`)
   }
 
   const handlePrint = () => window.print()
 
-  // ✅ EXPORTACIÓN CSV MEJORADA (Segura y con totales)
   const handleExportCSV = () => {
     if (transacciones.length === 0) {
       alert('No hay transacciones para exportar')
@@ -121,7 +140,6 @@ export default function CapitalPage() {
     }
 
     try {
-      // BOM para compatibilidad con Excel (evita caracteres raros)
       const BOM = '\uFEFF'
       const headers = 'Fecha,Tipo,Categoría,Descripción,Monto,Usuario\n'
       
@@ -129,7 +147,6 @@ export default function CapitalPage() {
         `${t.fecha},${t.tipo},${t.categoria},"${String(t.descripcion).replace(/"/g, '""')}",${t.monto},"${user?.email || 'Admin'}"`
       ).join('\n')
       
-      // Cálculo de totales
       const totalIngresos = transacciones.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const totalEgresos = transacciones.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
       const saldoNeto = totalIngresos - totalEgresos
@@ -147,12 +164,11 @@ export default function CapitalPage() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error(' Error al exportar CSV:', err)
+      console.error('❌ Error al exportar CSV:', err)
       alert('Hubo un error al generar el archivo')
     }
   }
 
-  // Loading screen
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>
       <div style={{ textAlign: 'center' }}>
@@ -264,26 +280,131 @@ export default function CapitalPage() {
               </div>
             </div>
 
-            {/* FORMULARIO */}
+            {/* FORMULARIO CON BOTONES SEPARADOS Y LISTAS */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '32px', marginBottom: '32px' }}>
               <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📝 Registrar Transacción</h2>
               <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                  
+                  {/* BOTONES SEPARADOS: INGRESO (VERDE) / EGRESO (ROJO) */}
                   <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
-                    <button type="button" onClick={() => setTipo('Ingreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Ingreso' ? '#059669' : '#030712', color: tipo === 'Ingreso' ? 'white' : '#9ca3af', border: '1px solid #1f2937', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>✅ Ingreso</button>
-                    <button type="button" onClick={() => setTipo('Egreso')} style={{ flex: 1, padding: '12px', backgroundColor: tipo === 'Egreso' ? '#dc2626' : '#030712', color: tipo === 'Egreso' ? 'white' : '#9ca3af', border: '1px solid #1f2937', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>📉 Egreso</button>
+                    <button 
+                      type="button" 
+                      onClick={() => { setTipo('Ingreso'); setDescripcion('') }} 
+                      style={{ 
+                        flex: 1, 
+                        padding: '14px', 
+                        backgroundColor: tipo === 'Ingreso' ? '#059669' : '#030712', 
+                        color: tipo === 'Ingreso' ? 'white' : '#9ca3af', 
+                        border: `2px solid ${tipo === 'Ingreso' ? '#059669' : '#1f2937'}`, 
+                        borderRadius: '8px', 
+                        cursor: 'pointer', 
+                        fontWeight: '700',
+                        fontSize: '16px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      ✅ INGRESO
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => { setTipo('Egreso'); setDescripcion('') }} 
+                      style={{ 
+                        flex: 1, 
+                        padding: '14px', 
+                        backgroundColor: tipo === 'Egreso' ? '#dc2626' : '#030712', 
+                        color: tipo === 'Egreso' ? 'white' : '#9ca3af', 
+                        border: `2px solid ${tipo === 'Egreso' ? '#dc2626' : '#1f2937'}`, 
+                        borderRadius: '8px', 
+                        cursor: 'pointer', 
+                        fontWeight: '700',
+                        fontSize: '16px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      📉 EGRESO
+                    </button>
                   </div>
-                  <div><label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Descripción *</label><input type="text" placeholder="Ej: Compra de insumos" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} /></div>
-                  <div><label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Monto *</label><input type="number" step="0.01" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} required style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} /></div>
-                  <div style={{ gridColumn: '1 / -1' }}><label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Categoría</label><input type="text" placeholder="Ej: capital, gastos, inversiones" value={categoria} onChange={(e) => setCategoria(e.target.value)} style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} /></div>
+
+                  {/* SELECT CON LISTA PREDEFINIDA */}
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>
+                      Concepto * (Selecciona de la lista)
+                    </label>
+                    <select 
+                      value={descripcion} 
+                      onChange={(e) => setDescripcion(e.target.value)} 
+                      required 
+                      style={{ 
+                        width: '100%', 
+                        padding: '12px', 
+                        backgroundColor: '#030712', 
+                        border: '1px solid #1f2937', 
+                        borderRadius: '8px', 
+                        color: 'white', 
+                        fontSize: '14px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="">-- Selecciona un concepto --</option>
+                      {(tipo === 'Ingreso' ? INGRESOS_OPCIONES : EGRESOS_OPCIONES).map((opcion) => (
+                        <option key={opcion} value={opcion}>{opcion}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* MONTO */}
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Monto *</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      value={monto} 
+                      onChange={(e) => setMonto(e.target.value)} 
+                      required 
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} 
+                    />
+                  </div>
+
+                  {/* CATEGORÍA (opcional) */}
+                  <div>
+                    <label style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '8px', display: 'block', fontWeight: '500' }}>Categoría</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej: capital, gastos, inversiones" 
+                      value={categoria} 
+                      onChange={(e) => setCategoria(e.target.value)} 
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#030712', border: '1px solid #1f2937', borderRadius: '8px', color: 'white', fontSize: '14px' }} 
+                    />
+                  </div>
                 </div>
-                <div style={{ marginTop: '24px' }}><button type="submit" style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '16px' }}>💾 Registrar Transacción</button></div>
+
+                <div style={{ marginTop: '24px' }}>
+                  <button 
+                    type="submit" 
+                    style={{ 
+                      width: '100%', 
+                      padding: '16px', 
+                      background: tipo === 'Ingreso' ? 'linear-gradient(135deg, #059669, #10b981)' : 'linear-gradient(135deg, #dc2626, #ef4444)', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px', 
+                      cursor: 'pointer', 
+                      fontWeight: '700', 
+                      fontSize: '16px',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    {tipo === 'Ingreso' ? '✅' : '📉'} Registrar {tipo}
+                  </button>
+                </div>
               </form>
             </div>
 
             {/* HISTORIAL */}
             <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
-              <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}> Historial de Transacciones</h2>
+              <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>📊 Historial de Transacciones</h2>
               {transacciones.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>📈</div>
