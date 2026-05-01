@@ -30,7 +30,7 @@ const EGRESOS_OPCIONES = [
   'Otro gasto'
 ]
 
-// ✅ URL DE GOOGLE SHEETS WEBHOOK (Reemplaza con tu URL real)
+// ✅ URL DE GOOGLE SHEETS WEBHOOK (Tu URL confirmada)
 const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwG1NOvxloQyn-g1widdBX0exHo0HE_2TpDC9tXUnzxDsM480tMVnce356tHZ-xkGeMDA/exec'
 
 export default function CapitalPage() {
@@ -55,7 +55,7 @@ export default function CapitalPage() {
       try {
         if (user?.id) {
           // Cargar avatar
-          const { data: profileData } = await supabase
+          const {  profileData } = await supabase
             .from('user_profiles')
             .select('avatar_url')
             .eq('id', user.id)
@@ -137,7 +137,7 @@ export default function CapitalPage() {
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
-  // ✅ Guardar en Supabase + Google Sheets (Backup automático)
+  // ✅ Guardar en Supabase + Google Sheets (Backup automático con logging mejorado)
   const handleSubmit = async (e: React.FormEvent, tipoForzado?: 'Ingreso' | 'Egreso') => {
     e.preventDefault()
     if (!descripcion || !monto) return alert('Completa concepto y monto')
@@ -157,7 +157,7 @@ export default function CapitalPage() {
         fecha: new Date().toISOString()
       }
 
-      // 1️⃣ Guardar en Supabase (PRIMERO - esto es lo crítico)
+      // 1️⃣ Guardar en Supabase (CRÍTICO - esto es lo importante)
       const { error: supabaseError } = await supabase
         .from('transacciones_capital')
         .insert([nuevaTransaccion])
@@ -166,10 +166,19 @@ export default function CapitalPage() {
 
       // 2️⃣ Enviar a Google Sheets (Backup automático - NO crítico)
       try {
-        await fetch(GOOGLE_SHEETS_WEBHOOK, {
+        console.log('📤 Enviando a Google Sheets...', {
+          id: nuevaTransaccion.id,
+          tipo: tipoAUsar,
+          descripcion,
+          monto
+        })
+
+        const response = await fetch(GOOGLE_SHEETS_WEBHOOK, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // El Apps Script espera 'descripcion', no 'description'
+          // ✅ IMPORTANTE: NO usar mode: 'no-cors' porque oculta los errores reales
+          headers: { 
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             id: nuevaTransaccion.id,
             fecha: nuevaTransaccion.fecha,
@@ -180,11 +189,34 @@ export default function CapitalPage() {
             categoria: categoria
           })
         })
-        console.log('✅ Backup en Google Sheets creado')
-      } catch (sheetsError) {
-        // ⚠️ Si Google Sheets falla, NO interrumpimos el flujo
-        // El dato YA está guardado en Supabase, que es lo importante
-        console.warn('⚠️ Google Sheets no respondió (pero se guardó en BD):', sheetsError)
+        
+        // ✅ Leer respuesta como texto PRIMERO (Google Apps Script devuelve texto plano)
+        const responseText = await response.text()
+        console.log('📊 Google Sheets raw response:', responseText)
+        
+        // Intentar parsear la respuesta JSON si es válida
+        try {
+          const responseData = JSON.parse(responseText)
+          if (responseData.success) {
+            console.log('✅ Backup en Google Sheets creado exitosamente')
+          } else {
+            console.warn('⚠️ Google Sheets respondió con error:', responseData.error)
+          }
+        } catch (parseError) {
+          // Si no es JSON válido, igual pudo haber funcionado
+          console.log('ℹ️ Respuesta de Google Sheets (no JSON):', responseText.substring(0, 200))
+        }
+        
+        // Verificar status HTTP
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${responseText.substring(0, 100)}`)
+        }
+        
+      } catch (sheetsError: any) {
+        // ⚠️ Error NO crítico: el dato YA está guardado en Supabase
+        console.warn('⚠️ Google Sheets sync falló:', sheetsError.message)
+        console.warn('💡 Los datos están SEGUROS en tu base de datos principal (Supabase).')
+        console.warn('🔧 Para debug: Revisa la consola arriba para ver el error exacto.')
       }
 
       // Actualizar estado local inmediatamente para feedback visual
