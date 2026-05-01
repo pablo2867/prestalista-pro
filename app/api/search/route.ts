@@ -1,50 +1,41 @@
-// app/api/search/route.ts - DIAGNÓSTICO CORREGIDO Y FUNCIONAL
+// app/api/search/route.ts - VERSIÓN MÍNIMA FUNCIONAL
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
-  if (!url || !serviceKey) {
-    return NextResponse.json({ error: 'Faltan variables de entorno' }, { status: 500 })
-  }
-
-  // ✅ Cliente con SERVICE_ROLE_KEY
-  const supabase = createClient(url, serviceKey)
   const query = request.nextUrl.searchParams.get('q')?.trim()
 
+  // Si no hay query, devolver vacío (sin error)
+  if (!query || query.length < 2) {
+    return NextResponse.json({ success: true, results: { distribuidores: [] }, total: 0 })
+  }
+
   try {
-    // 🔍 1. PRUEBA DE CONEXIÓN REAL (Trae 1 dato para confirmar)
-    const {  testConnection, error: connError } = await supabase
+    // 🔍 BÚSQUEDA SIMPLE Y DIRECTA
+    const { data, error } = await supabase
       .from('distribuidores')
-      .select('id, nombre')
-      .limit(1)
+      .select('id, nombre, email, telefono, comision_porcentaje, estado')
+      .filter('nombre', 'ilike', `%${query}%`)
+      .limit(10)
 
-    if (connError) throw connError
-
-    // 🔍 2. BÚSQUEDA REAL
-    const {  results, error: searchError } = await supabase
-      .from('distribuidores')
-      .select('id, nombre, email')
-      .ilike('nombre', `%${query}%`)
-      .limit(5)
+    if (error) {
+      console.error('❌ Search error:', error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
-      debug: {
-        connection: '✅ OK',
-        primer_registro_encontrado: testConnection,
-        error_busqueda: searchError?.message
-      },
-      results: { distribuidores: results || [] },
-      total: results?.length || 0
+      results: { distribuidores: data || [] },
+      total: data?.length || 0
     })
 
-  } catch (error: any) {
-    return NextResponse.json({ 
-      error: error.message,
-      success: false 
-    }, { status: 500 })
+  } catch (err: any) {
+    console.error('❌ Search exception:', err)
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
   }
 }
