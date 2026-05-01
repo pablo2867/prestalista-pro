@@ -26,7 +26,7 @@ export default function CapitalPage() {
   const [transacciones, setTransacciones] = useState<any[]>([])
   const [metrics, setMetrics] = useState({ saldo: 0, ingresos: 0, egresos: 0 })
 
-  // ✅ Cargar datos y Avatar - CORREGIDO
+  // ✅ Cargar datos y Avatar
   useEffect(() => { 
     const initPage = async () => {
       try {
@@ -37,7 +37,7 @@ export default function CapitalPage() {
       } catch (error) {
         console.error('❌ Error cargando avatar:', error)
       } finally {
-        setLoading(false) // ✅ ESTO SOLUCIONA EL PROBLEMA
+        setLoading(false)
       }
     }
     initPage()
@@ -86,13 +86,7 @@ export default function CapitalPage() {
     e.preventDefault()
     if (!descripcion || !monto) return alert('Completa descripción y monto')
     
-    // 🔗 Conecta aquí tu lógica de Supabase cuando la tengas lista:
-    // await supabase.from('transacciones').insert({ 
-    //   tipo, descripcion, monto: parseFloat(monto), categoria, user_id: user?.id,
-    //   fecha: new Date().toISOString()
-    // })
-    
-    // Para demo, agregamos al estado local:
+    // Crear transacción local
     const nuevaTransaccion = {
       id: Date.now(),
       tipo,
@@ -110,6 +104,25 @@ export default function CapitalPage() {
       ingresos: tipo === 'Ingreso' ? prev.ingresos + nuevaTransaccion.monto : prev.ingresos,
       egresos: tipo === 'Egreso' ? prev.egresos + nuevaTransaccion.monto : prev.egresos
     }))
+    
+    // ✅ SINCRONIZAR CON AIRTABLE (NUEVO)
+    try {
+      await fetch('/api/sync-airtable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha: new Date().toLocaleDateString('es-MX'),
+          tipo: tipo,
+          descripcion: descripcion,
+          monto: monto,
+          usuario: user?.email || 'Admin'
+        })
+      })
+      console.log('✅ Enviado a Airtable')
+    } catch (e) {
+      console.error('⚠️ Airtable falló (no crítico):', e)
+      // No mostramos error al usuario para no interrumpir el flujo
+    }
     
     // Reset form
     setDescripcion('')
