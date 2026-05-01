@@ -1,4 +1,4 @@
-// app/prestamos/page.tsx - VERSIÓN FINAL DEFINITIVA
+// app/prestamos/page.tsx - CON SUPABASE DIRECTO + GOOGLE SHEETS SYNC
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -8,6 +8,9 @@ import { useAuth } from '../lib/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import ProtectedRoute from '../lib/ProtectedRoute'
 import NotificationsBell from '../components/NotificationsBell'
+
+// ✅ URL DE GOOGLE SHEETS WEBHOOK (Opcional - descomenta y pon tu URL si quieres backup)
+// const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/YOUR_URL/exec'
 
 export default function PrestamosPage() {
   const { user, signOut, isAdmin, isDistributor, isCollector } = useAuth()
@@ -43,9 +46,81 @@ export default function PrestamosPage() {
 
   const { triggerPrestamosUpdate, triggerMovimientosUpdate } = useGlobalContext()
 
+  // ✅ Cargar datos desde Supabase DIRECTO (fallback si API falla)
+  const loadFromSupabase = async () => {
+    try {
+      console.log('🔍 Cargando préstamos desde Supabase directo...')
+      if (!user?.id) return null
+
+      // Cargar préstamos
+      let query = supabase.from('prestamos').select(`
+        *,
+        prestatario:prestatarios(nombre, apellido, telefono, email)
+      `).eq('user_id', user.id)
+
+      if (filterEstado) query = query.eq('estado', filterEstado)
+      
+      const { data, error } = await query.order('created_at', { ascending: false })
+      
+      if (error) {
+        console.warn('⚠️ Error cargando desde Supabase:', error)
+        return null
+      }
+
+      // Calcular métricas
+      const total = data?.length || 0
+      const activos = data?.filter(p => p.estado === 'activo').length || 0
+      const totalPrestado = data?.reduce((sum, p) => sum + (p.monto_principal || 0), 0) || 0
+      const totalPorCobrar = data?.filter(p => p.estado === 'activo')
+        .reduce((sum, p) => sum + (p.saldo_pendiente || p.monto_total || 0), 0) || 0
+
+      return {
+        prestamos: data || [],
+        metrics: { total, activos, totalPrestado, totalPorCobrar }
+      }
+    } catch (err) {
+      console.error('❌ Error en loadFromSupabase:', err)
+      return null
+    }
+  }
+
   // ✅ Cargar datos iniciales y Avatar
   useEffect(() => { 
-    loadData()
+    const initData = async () => {
+      try {
+        setLoading(true)
+        
+        // Intentar cargar desde API primero (tu lógica existente)
+        try {
+          const params = new URLSearchParams()
+          if (filterEstado) params.append('estado', filterEstado)
+          const res = await fetch(`/api/prestamos?${params}`)
+          const json = await res.json()
+          if (json.success) { 
+            setPrestamos(json.prestamos || [])
+            setMetrics(json.metrics || { total: 0, activos: 0, totalPrestado: 0, totalPorCobrar: 0 })
+            console.log('✅ Datos cargados desde API')
+            return // Si la API funciona, no necesitamos Supabase directo
+          }
+        } catch (apiError) {
+          console.warn('⚠️ API no respondió, usando fallback a Supabase directo')
+        }
+
+        // Fallback: cargar directo desde Supabase
+        const supabaseData = await loadFromSupabase()
+        if (supabaseData) {
+          setPrestamos(supabaseData.prestamos)
+          setMetrics(supabaseData.metrics)
+          console.log('✅ Datos cargados desde Supabase directo (fallback)')
+        }
+      } catch (err) {
+        console.error('❌ Error cargando datos:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    initData()
     loadPrestatarios()
     loadDistribuidores()
     
@@ -54,29 +129,22 @@ export default function PrestamosPage() {
         if (data?.avatar_url) setAvatarUrl(data.avatar_url)
       })
     }
-  }, [])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams()
-      if (filterEstado) params.append('estado', filterEstado)
-      const res = await fetch(`/api/prestamos?${params}`)
-      const json = await res.json()
-      if (json.success) { 
-        setPrestamos(json.prestamos || [])
-        setMetrics(json.metrics || { total: 0, activos: 0, totalPrestado: 0, totalPorCobrar: 0 })
-      }
-    } catch (err) { console.error(err) } finally { setLoading(false) }
-  }
+  }, [filterEstado, user?.id])
 
   const loadPrestatarios = async () => { 
-    try { const res = await fetch('/api/prestatarios'); const json = await res.json(); if (json.success) setPrestatarios(json.prestatarios || []) } 
-    catch (err) { console.error(err) } 
+    try { 
+      const res = await fetch('/api/prestatarios')
+      const json = await res.json()
+      if (json.success) setPrestatarios(json.prestatarios || []) 
+    } catch (err) { console.error(err) } 
   }
+  
   const loadDistribuidores = async () => { 
-    try { const res = await fetch('/api/distributors'); const json = await res.json(); if (json.success) setDistribuidores(json.data || []) } 
-    catch (err) { console.error(err) } 
+    try { 
+      const res = await fetch('/api/distributors')
+      const json = await res.json()
+      if (json.success) setDistribuidores(json.data || []) 
+    } catch (err) { console.error(err) } 
   }
 
   useEffect(() => {
@@ -108,7 +176,7 @@ export default function PrestamosPage() {
     return null
   }
 
-  // ✅ LÓGICA DE SUBIDA DE AVATAR - 100% CORREGIDA
+  // ✅ LÓGICA DE SUBIDA DE AVATAR
   const handleAvatarClick = () => fileInputRef.current?.click()
   
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,29 +187,17 @@ export default function PrestamosPage() {
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}.${fileExt}`
-      
-      // Subir a Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true, cacheControl: '3600' })
-      
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file, { upsert: true, cacheControl: '3600' })
       if (uploadError) throw uploadError
-      
-      // Obtener URL pública
       const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
-      const publicUrl = data.publicUrl
-      
-      // ✅ Guardar en perfil con email incluido (para evitar errores NOT NULL)
       await supabase.from('user_profiles').upsert({ 
         id: user.id, 
-        avatar_url: publicUrl,
+        avatar_url: data.publicUrl,
         email: user?.email || null,
         updated_at: new Date().toISOString()
       })
-      
-      setAvatarUrl(publicUrl)
+      setAvatarUrl(data.publicUrl)
       alert('✅ Avatar actualizado exitosamente')
-      
     } catch (err: any) {
       console.error('❌ Error al subir avatar:', err)
       alert('Error: ' + (err.message || err.toString()))
@@ -151,6 +207,7 @@ export default function PrestamosPage() {
     }
   }
 
+  // ✅ Guardar préstamo con backup a Google Sheets (opcional)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.prestatario_id) return alert('👤 Selecciona un prestatario')
@@ -168,6 +225,7 @@ export default function PrestamosPage() {
 
     setFormLoading(true)
     try {
+      // 1️⃣ Guardar vía API (tu lógica existente)
       const body = { ...formData, userId }
       const res = await fetch('/api/prestamos', { 
         method: 'POST', 
@@ -175,12 +233,72 @@ export default function PrestamosPage() {
         body: JSON.stringify(body)
       })
       const result = await res.json()
+      
       if (result.success) { 
+        console.log('✅ Préstamo guardado vía API')
+        
+        // 2️⃣ Backup opcional a Google Sheets (descomenta si quieres activarlo)
+        /*
+        try {
+          if (typeof GOOGLE_SHEETS_WEBHOOK !== 'undefined') {
+            await fetch(GOOGLE_SHEETS_WEBHOOK, {
+              method: 'POST',
+              mode: 'no-cors',
+              keepalive: true,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipo: 'Préstamo',
+                prestatario: prestatarios.find(p => p.id === formData.prestatario_id)?.nombre || 'N/A',
+                monto: monto,
+                tasa: tasa,
+                plazo: plazo,
+                cuota: calculo.cuotaMensual,
+                fecha: new Date().toISOString(),
+                usuario: user?.email || 'Usuario'
+              })
+            })
+            console.log('✅ Backup enviado a Google Sheets')
+          }
+        } catch (sheetsError) {
+          console.warn('⚠️ Google Sheets backup falló (pero el préstamo está guardado):', sheetsError)
+        }
+        */
+        
         alert('✅ Préstamo registrado')
         setFormData({ prestatario_id: '', distribuidor_id: '', monto_principal: '', tasa_interes_mensual: '10', plazo_meses: '6', cuota_inicial: '0', notas: '', garantia: '' })
         loadData() 
-      } else { alert('❌ ' + result.error) }
-    } catch (err: any) { alert('Error: ' + err.message) } finally { setFormLoading(false) }
+      } else { 
+        alert('❌ ' + result.error) 
+      }
+    } catch (err: any) { 
+      console.error('❌ Error guardando préstamo:', err)
+      alert('Error: ' + err.message) 
+    } finally { 
+      setFormLoading(false) 
+    }
+  }
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (filterEstado) params.append('estado', filterEstado)
+      const res = await fetch(`/api/prestamos?${params}`)
+      const json = await res.json()
+      if (json.success) { 
+        setPrestamos(json.prestamos || [])
+        setMetrics(json.metrics || { total: 0, activos: 0, totalPrestado: 0, totalPorCobrar: 0 })
+      }
+    } catch (err) { 
+      console.error('⚠️ Error cargando desde API, intentando Supabase directo...', err)
+      const supabaseData = await loadFromSupabase()
+      if (supabaseData) {
+        setPrestamos(supabaseData.prestamos)
+        setMetrics(supabaseData.metrics)
+      }
+    } finally { 
+      setLoading(false) 
+    }
   }
 
   const handleRegistrarPago = (prestamo: any) => {
@@ -218,25 +336,48 @@ export default function PrestamosPage() {
     } catch (err: any) { alert('Error: ' + err.message) }
   }
 
+  // ✅ CSV Export mejorado con formato Excel (BOM)
   const exportarPrestamos = () => {
-    const BOM = '\uFEFF'
-    const headers = 'Cliente;Fecha Inicio;Monto Principal;Monto Total;Cuota Mensual;Saldo Pendiente;Estado;Vencimiento'
-    const rows = prestamosFiltrados.map((p: any) => [
-      `${p.prestatario?.nombre || ''} ${p.prestatario?.apellido || ''}`,
-      new Date(p.fecha_inicio).toLocaleDateString('es-MX'),
-      Number(p.monto_principal).toFixed(2),
-      Number(p.monto_total).toFixed(2),
-      Number(p.cuota_mensual).toFixed(2),
-      Number(p.saldo_pendiente).toFixed(2),
-      p.estado,
-      new Date(p.fecha_vencimiento).toLocaleDateString('es-MX')
-    ].join(';'))
-    const csvContent = BOM + [headers, ...rows].join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `prestamos_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
+    if (prestamosFiltrados.length === 0) return alert('No hay préstamos para exportar')
+    
+    try {
+      const BOM = '\uFEFF' // Para compatibilidad con Excel
+      const headers = 'Fecha;Cliente;Monto Principal;Tasa %;Plazo;Cuota Mensual;Monto Total;Saldo Pendiente;Estado;Vencimiento;Notas'
+      
+      const rows = prestamosFiltrados.map((p: any) => [
+        new Date(p.fecha_inicio).toLocaleDateString('es-MX'),
+        `${p.prestatario?.nombre || ''} ${p.prestatario?.apellido || ''}`.trim(),
+        Number(p.monto_principal).toFixed(2),
+        Number(p.tasa_interes_mensual).toFixed(2) + '%',
+        p.plazo_meses + ' meses',
+        Number(p.cuota_mensual).toFixed(2),
+        Number(p.monto_total).toFixed(2),
+        Number(p.saldo_pendiente || p.monto_total).toFixed(2),
+        p.estado,
+        new Date(p.fecha_vencimiento).toLocaleDateString('es-MX'),
+        `"${(p.notas || '').replace(/"/g, '""')}"`
+      ].join(';'))
+      
+      // Agregar totales al final
+      const totalPrestado = prestamosFiltrados.reduce((sum, p) => sum + (p.monto_principal || 0), 0)
+      const totalPorCobrar = prestamosFiltrados.filter(p => p.estado === 'activo').reduce((sum, p) => sum + (p.saldo_pendiente || p.monto_total || 0), 0)
+      const summary = `\n\nRESUMEN:\nTotal Préstamos: ${prestamosFiltrados.length}\nTotal Prestado: $${totalPrestado.toFixed(2)}\nPor Cobrar (Activos): $${totalPorCobrar.toFixed(2)}\nExportado: ${new Date().toLocaleDateString('es-MX')}`
+      
+      const csvContent = BOM + [headers, ...rows, summary].join('\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Prestamos_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      console.log('✅ CSV exportado correctamente')
+    } catch (err) {
+      console.error('❌ Error exportando CSV:', err)
+      alert('Error al generar el archivo CSV')
+    }
   }
 
   const getInitials = () => {
@@ -280,7 +421,7 @@ export default function PrestamosPage() {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
-        <div>Cargando...</div>
+        <div>Cargando préstamos...</div>
       </div>
     </div>
   )
@@ -358,7 +499,7 @@ export default function PrestamosPage() {
               <p style={{ margin: '0 0 24px 0', opacity: 0.9, color: 'rgba(255,255,255,0.9)' }}>Administra préstamos, intereses y cobros</p>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={() => window.print()} className="no-print" style={{ flex: 1, padding: '12px 24px', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', backdropFilter: 'blur(4px)' }}>🖨️ Imprimir</button>
-                <button onClick={exportarPrestamos} className="no-print" style={{ flex: 1, padding: '12px 24px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>📥 Exportar</button>
+                <button onClick={exportarPrestamos} className="no-print" style={{ flex: 1, padding: '12px 24px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>📥 Exportar CSV (Excel)</button>
               </div>
             </div>
 
