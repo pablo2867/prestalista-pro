@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Verificar variables críticas
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const webhookUrl = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL
@@ -14,7 +13,7 @@ const supabase = supabaseUrl && supabaseKey
 
 type Prestatario = {
   id: string
-  nombre_completo: string
+  nombre_completo: string | null
   documento: string | null
   telefono: string | null
   email: string | null
@@ -40,7 +39,6 @@ export default function PrestatariosPage() {
   })
 
   useEffect(() => {
-    // Verificar configuración al montar
     if (!supabaseUrl || !supabaseKey) {
       setConfigError('⚙️ Variables de Supabase no configuradas en Vercel')
       setLoading(false)
@@ -115,7 +113,7 @@ export default function PrestatariosPage() {
   const openEdit = (p: Prestatario) => {
     setEditingId(p.id)
     setForm({
-      nombre_completo: p.nombre_completo,
+      nombre_completo: p.nombre_completo || '',
       documento: p.documento || '',
       telefono: p.telefono || '',
       email: p.email || '',
@@ -143,9 +141,15 @@ export default function PrestatariosPage() {
     showToast('📤 Sincronizando...', 'success')
 
     const payload = data.map(p => ({
-      ID: p.id, Nombre: p.nombre_completo, Documento: p.documento || '',
-      Telefono: p.telefono || '', Email: p.email || '', Direccion: p.direccion || '',
-      Estado: p.estado, Notas: p.notas || '', Creado: new Date(p.created_at).toLocaleString('es-MX')
+      ID: p.id, 
+      Nombre: p.nombre_completo || '', 
+      Documento: p.documento || '',
+      Telefono: p.telefono || '', 
+      Email: p.email || '', 
+      Direccion: p.direccion || '',
+      Estado: p.estado, 
+      Notas: p.notas || '', 
+      Creado: new Date(p.created_at).toLocaleString('es-MX')
     }))
 
     try {
@@ -166,12 +170,14 @@ export default function PrestatariosPage() {
     setSyncing(false)
   }
 
-  const filtered = data.filter(p => 
-    p.nombre_completo.toLowerCase().includes(search.toLowerCase()) ||
-    (p.documento && p.documento.toLowerCase().includes(search.toLowerCase()))
-  )
+  // 🔒 FILTRO BLINDADO CONTRA NULL/UNDEFINED
+  const filtered = data.filter(p => {
+    const nombre = String(p.nombre_completo ?? '').toLowerCase()
+    const doc = String(p.documento ?? '').toLowerCase()
+    const term = search.toLowerCase()
+    return nombre.includes(term) || doc.includes(term)
+  })
 
-  // PANTALLA DE ERROR DE CONFIGURACIÓN
   if (configError) {
     return (
       <main className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
@@ -179,27 +185,7 @@ export default function PrestatariosPage() {
           <div className="text-5xl mb-4">⚙️</div>
           <h2 className="text-2xl font-bold text-red-600 mb-4">Error de Configuración</h2>
           <p className="text-gray-700 mb-6 bg-gray-100 p-4 rounded-lg">{configError}</p>
-          
-          <div className="text-left text-sm text-gray-600 mb-6 space-y-2">
-            <p><strong>Solución:</strong></p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>Ve a Vercel → Settings → Environment Variables</li>
-              <li>Agrega estas variables:</li>
-            </ol>
-            <ul className="list-disc list-inside ml-4 mt-2 text-xs font-mono bg-gray-100 p-3 rounded">
-              <li>NEXT_PUBLIC_SUPABASE_URL</li>
-              <li>NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
-              <li>NEXT_PUBLIC_GAS_WEBHOOK_URL</li>
-            </ul>
-            <p className="mt-3 text-xs">Después de agregarlas, haz Redeploy</p>
-          </div>
-          
-          <button 
-            onClick={() => window.location.reload()} 
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Recargar Página
-          </button>
+          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Recargar</button>
         </div>
       </main>
     )
@@ -208,9 +194,7 @@ export default function PrestatariosPage() {
   return (
     <main className="p-6 bg-gray-50 min-h-screen">
       {toast && (
-        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white text-sm z-50 ${
-          toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-        }`}>
+        <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white text-sm z-50 ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
           {toast.msg}
         </div>
       )}
@@ -218,11 +202,7 @@ export default function PrestatariosPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Prestatarios</h1>
         <div className="flex gap-3 w-full sm:w-auto">
-          <input
-            type="text" placeholder="Buscar..."
-            value={search} onChange={e => setSearch(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-64"
-          />
+          <input type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-64" />
           <button onClick={() => { resetForm(); setModalOpen(true) }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Nuevo</button>
           <button onClick={syncToSheets} disabled={syncing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
             {syncing ? '🔄...' : '🔄 Sheets'}
@@ -250,14 +230,14 @@ export default function PrestatariosPage() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map(p => (
                   <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{p.nombre_completo}</td>
+                    <td className="px-4 py-3 font-medium">{p.nombre_completo || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{p.documento || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{p.telefono || p.email || '-'}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                         p.estado === 'activo' ? 'bg-green-100 text-green-700' :
                         p.estado === 'moroso' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                      }`}>{p.estado.toUpperCase()}</span>
+                      }`}>{(p.estado || 'activo').toUpperCase()}</span>
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline">Editar</button>
