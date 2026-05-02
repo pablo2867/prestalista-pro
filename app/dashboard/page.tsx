@@ -1,107 +1,120 @@
-// app/dashboard/page.tsx - VERSIÓN FINAL CON CLIENTE COMPARTIDO
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useGlobalContext } from '../lib/GlobalContext'
 import { useAuth } from '../lib/AuthContext'
-import ProtectedRoute from '../lib/ProtectedRoute'
-// ✅ IMPORTAR CLIENTE COMPARTIDO en lugar de crear uno nuevo
 import { supabase } from '../lib/supabaseClient'
-// 🔔 Import del componente de notificaciones
+import ProtectedRoute from '../lib/ProtectedRoute'
 import NotificationsBell from '../components/NotificationsBell'
 
-// ❌ ELIMINADO: Ya no creamos un cliente nuevo aquí
-// const supabase = createClient(...)
-
 export default function DashboardPage() {
-  const { user, signOut, isAdmin, isDistributor, isCollector } = useAuth()
-  const [metrics, setMetrics] = useState<any>(null)
+  const { user, signOut, isAdmin, isDistributor } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const { prestamosActualizados } = useGlobalContext()
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  
+  // ✅ Estados para Métricas
+  const [metrics, setMetrics] = useState({
+    saldoCaja: 0,
+    prestamosActivos: 0,
+    porCobrar: 0,
+    vencidos: 0
+  })
 
+  // ✅ Estados para Semáforo (Listas)
+  const [vencidos, setVencidos] = useState<any[]>([])
+  const [porVencer, setPorVencer] = useState<any[]>([])
+  const [recientes, setRecientes] = useState<any[]>([])
+
+  // ✅ Cargar Datos al Iniciar
   useEffect(() => {
-    const fetchDashboard = async () => {
+    const loadData = async () => {
+      if (!user?.id) return
       try {
         setLoading(true)
-        const res = await fetch('/api/dashboard')
-        if (res.ok) {
-          const json = await res.json()
-          setMetrics(json.metrics)
+
+        // 1. Cargar Avatar
+        const { data: profile } = await supabase.from('user_profiles').select('avatar_url').eq('id', user.id).single()
+        if (profile?.avatar_url) setAvatarUrl(profile.avatar_url)
+
+        // 2. Cargar Métricas de Capital (Saldo)
+        const { data: capital } = await supabase
+          .from('transacciones_capital')
+          .select('tipo, monto')
+          .eq('user_id', user.id)
+        
+        let ingresos = 0
+        let egresos = 0
+        if (capital) {
+          ingresos = capital.filter(t => t.tipo === 'Ingreso').reduce((sum, t) => sum + (t.monto || 0), 0)
+          egresos = capital.filter(t => t.tipo === 'Egreso').reduce((sum, t) => sum + (t.monto || 0), 0)
         }
-      } catch (e) { console.error('Error cargando dashboard', e) } finally { setLoading(false) }
-    }
-    fetchDashboard()
-  }, [prestamosActualizados])
 
-  const handleAvatarClick = () => { fileInputRef.current?.click() }
+        // 3. Cargar Préstamos Activos y Vencidos
+        const { data: prestamos } = await supabase
+          .from('prestamos')
+          .select('id, prestatario, monto_total, saldo_pendiente, estado, fecha_vencimiento, fecha_inicio')
+          .eq('user_id', user.id)
+          .or('estado.eq.activo,estado.eq.vencido')
+          .order('fecha_vencimiento', { ascending: true }) // Ordenar por fecha de vencimiento
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      setUploading(true)
-      const file = event.target.files?.[0]
-      if (!file || !user) return
-      if (!file.type.startsWith('image/') || file.size > 2 * 1024 * 1024) {
-        alert('Imagen válida < 2MB')
-        return
+        let activosCount = 0
+        let totalPorCobrar = 0
+        let vencidosCount = 0
+        let listaVencidos: any[] = []
+        let listaPorVencer: any[] = []
+
+        if (prestamos) {
+          const today = new Date().toISOString().split('T')[0]
+          const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+          prestamos.forEach(p => {
+            if (p.estado === 'activo') {
+              activosCount++
+              totalPorCobrar += (p.saldo_pendiente || 0)
+              
+              // Lógica Semáforo
+              if (p.fecha_vencimiento && p.fecha_vencimiento < today) {
+                listaVencidos.push(p)
+              } else if (p.fecha_vencimiento && p.fecha_vencimiento <= nextWeek) {
+                listaPorVencer.push(p)
+              }
+            }
+            if (p.estado === 'vencido') {
+              vencidosCount++
+              listaVencidos.push(p) // Asegurar que los marcados como vencidos aparezcan
+            }
+          })
+        }
+
+        setMetrics({
+          saldoCaja: ingresos - egresos,
+          prestamosActivos: activosCount,
+          porCobrar: totalPorCobrar,
+          vencidos: vencidosCount
+        })
+
+        setVencidos(listaVencidos.slice(0, 3)) // Top 3
+        setPorVencer(listaPorVencer.slice(0, 3)) // Top 3
+        
+        // Recientes: Últimos 3 préstamos creados
+        const { data: recientesData } = await supabase
+          .from('prestamos')
+          .select('id, prestatario, monto_principal, fecha_inicio')
+          .eq('user_id', user.id)
+          .order('fecha_inicio', { ascending: false })
+          .limit(3)
+        if (recientesData) setRecientes(recientesData)
+
+      } catch (error) {
+        console.error('❌ Error cargando dashboard:', error)
+      } finally {
+        setLoading(false)
       }
-      const fileExt = file.name.split('.').pop()
-      const filePath = `${user.id}/${user.id}.${fileExt}`
-      
-      const uploadResult = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true })
-      if (uploadResult.error) throw uploadResult.error
-      
-      const urlResult = supabase.storage.from('avatars').getPublicUrl(filePath)
-      const publicUrl = urlResult.data?.publicUrl
-      if (!publicUrl) throw new Error('No se pudo obtener la URL pública')
-      
-      const updateResult = await supabase.from('user_profiles').update({ avatar_url: publicUrl }).eq('id', user.id)
-      if (updateResult.error) throw updateResult.error
-      
-      window.location.reload()
-    } catch (error) { alert('Error: ' + (error as Error).message) } finally { setUploading(false) }
-  }
-
-  const exportarDashboard = () => {
-    if (!metrics) return alert('Cargando datos...')
-    const BOM = '\uFEFF'
-    let csv = BOM
-    
-    const add = (titulo: string, filas: any[]) => {
-      csv += `\n\n${titulo}\nConcepto;Valor\n`
-      filas.forEach((fila: any) => {
-        const [concepto, valor] = fila
-        csv += `${concepto};${valor}\n`
-      })
     }
-    
-    add('CAPITAL', [
-      ['Saldo Actual', metrics.capital?.saldoActual?.toFixed(2) || '0'],
-      ['Total Ingresos', metrics.capital?.totalIngresos?.toFixed(2) || '0'],
-      ['Total Egresos', metrics.capital?.totalEgresos?.toFixed(2) || '0'],
-      ['Distribuidores', metrics.distributors?.total?.toString() || '0']
-    ])
-    add('CLIENTES', [
-      ['Total', metrics.clientes?.total?.toString() || '0'],
-      ['Activos', metrics.clientes?.activos?.toString() || '0'],
-      ['Morosos', metrics.clientes?.morosos?.toString() || '0']
-    ])
-    add('PRÉSTAMOS', [
-      ['Total', metrics.prestamos?.total?.toString() || '0'],
-      ['Activos', metrics.prestamos?.activos?.toString() || '0'],
-      ['Prestado', metrics.prestamos?.totalPrestado?.toFixed(2) || '0'],
-      ['Por Cobrar', metrics.prestamos?.totalPorCobrar?.toFixed(2) || '0']
-    ])
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `dashboard_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-  }
+
+    loadData()
+  }, [user?.id])
 
   const getInitials = () => {
     if (user?.full_name) {
@@ -111,196 +124,159 @@ export default function DashboardPage() {
     return user?.email?.[0]?.toUpperCase() || 'U'
   }
 
-  const getRoleColor = () => {
-    if (isAdmin()) return { backgroundColor: '#7c3aed', color: '#fff' }
-    if (isDistributor()) return { backgroundColor: '#2563eb', color: '#fff' }
-    return { backgroundColor: '#059669', color: '#fff' }
-  }
-
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>⏳ Cargando...</div>
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0b0f19', color: 'white' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1.5s infinite' }}>⏳</div>
+        <div>Cargando Dashboard...</div>
+      </div>
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }`}</style>
+    </div>
+  )
 
   return (
     <ProtectedRoute>
-      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui', color: 'white' }}>
+      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0b0f19', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         
-        {/* 📱 CSS Responsive */}
         <style>{`
           @media (max-width: 768px) {
-            .sidebar { 
-              transform: translateX(-100%) !important; 
-              transition: transform 0.3s ease; 
-            }
-            .sidebar.open { 
-              transform: translateX(0) !important; 
-            }
-            .main { 
-              margin-left: 0 !important; 
-              padding: 16px !important; 
-            }
-            .grid-stats { 
-              grid-template-columns: 1fr 1fr !important; 
-              gap: 12px !important; 
-            }
-            .header-content { 
-              flex-direction: column !important; 
-              align-items: flex-start !important; 
-            }
-            .mobile-menu-btn { 
-              display: flex !important; 
-            }
-            .overlay { 
-              display: block !important; 
-            }
+            .sidebar { transform: translateX(-100%) !important; transition: transform 0.3s ease; }
+            .sidebar.open { transform: translateX(0) !important; }
+            .main-content { margin-left: 0 !important; }
+            .mobile-menu-btn { display: flex !important; }
+            .overlay { display: block !important; }
           }
           @media (min-width: 769px) {
-            .overlay { 
-              display: none !important; 
-            }
-            .mobile-menu-btn { 
-              display: none !important; 
-            }
-          }
-          @media print { 
-            aside, .no-print, .overlay { display: none !important; } 
-            main { margin-left: 0 !important; padding: 20px !important; } 
-            body { background: white !important; color: black !important; } 
-            * { color: black !important; background: white !important; } 
+            .overlay { display: none !important; }
+            .mobile-menu-btn { display: none !important; }
           }
         `}</style>
 
-        {/* Overlay para cerrar sidebar en móvil */}
         <div className="overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 40 }} />
 
-        {/* Sidebar */}
-        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '260px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed' as const, top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column' as const, zIndex: 50 }}>
-          <div style={{ padding: '20px', borderBottom: '1px solid #1f2937', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div onClick={handleAvatarClick} style={{ width: 48, height: 48, borderRadius: '50%', background: user?.avatar_url ? 'transparent' : '#1e40af', border: '2px solid #3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}>
-                {user?.avatar_url ? <img src={user.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <span style={{ fontSize: 18, fontWeight: 'bold', color: 'white', lineHeight: '48px' }}>{getInitials()}</span>}
+        {/* ✅ SIDEBAR */}
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ width: '280px', backgroundColor: '#111827', borderRight: '1px solid #1f2937', position: 'fixed', top: 0, left: 0, bottom: 0, display: 'flex', flexDirection: 'column', zIndex: 50 }}>
+          <div style={{ padding: '24px 20px', borderBottom: '1px solid #1f2937' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>💼</div>
+              <div style={{ fontSize: '20px', fontWeight: 'bold', color: 'white' }}>PrestaLista</div>
+            </div>
+            <div style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold', color: 'white', background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)', flexShrink: 0 }}>
+                {avatarUrl ? (<img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />) : (getInitials())}
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} style={{ display: 'none' }} />
-              <div>
-                <div style={{ fontWeight: 'bold', fontSize: 14 }}>{user?.full_name || 'Usuario'}</div>
-                <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' as const, ...getRoleColor() }}>{user?.role}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: '600', fontSize: '14px', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name || 'Usuario'}</div>
+                <div style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', backgroundColor: isAdmin() ? '#7c3aed' : isDistributor() ? '#2563eb' : '#059669', color: 'white' }}>{user?.role || 'ADMIN'}</div>
               </div>
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>{user?.email}</div>
           </div>
-          
-          <nav style={{ flex: 1, overflowY: 'auto' as const, padding: '16px 12px' }}>
-            <Link href="/dashboard" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 12, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', borderRadius: 8, marginBottom: 4, textDecoration: 'none', fontWeight: 600 }}>📊 Dashboard</Link>
-            
-            {(isAdmin() || isDistributor()) && (
-              <Link href="/prestamos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>📄 Préstamos</Link>
-            )}
-            
-            {(isAdmin() || isCollector()) && (
-              <Link href="/movimientos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>📋 Movimientos</Link>
-            )}
-            
-            {isAdmin() ? (
-              <Link href="/prestatarios" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>👤 Prestatarios</Link>
-            ) : (
-              <Link href="/prestatarios?mis-clientes=true" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>👤 Mis Clientes</Link>
-            )}
-            
-            {isAdmin() && (
-              <>
-                <Link href="/distribuidores" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>🤝 Distribuidores</Link>
-                <Link href="/capital" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>💰 Capital</Link>
-              </>
-            )}
-            
-            {(isAdmin() || isDistributor()) && (
-              <Link href="/leads" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', gap: 12, padding: 10, color: '#9ca3af', borderRadius: 8, marginBottom: 4, textDecoration: 'none' }}>🎯 Mis Leads</Link>
-            )}
+
+          <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px' }}>
+            <Link href="/dashboard" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none', fontWeight: '600' }}><span style={{ fontSize: '18px' }}>📊</span><span>Dashboard</span></Link>
+            <Link href="/prestamos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>📄</span><span>Préstamos</span></Link>
+            <Link href="/capital" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>💰</span><span>Capital</span></Link>
+            {(isAdmin() || isDistributor()) && (<Link href="/movimientos" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>📋</span><span>Movimientos</span></Link>)}
+            {isAdmin() && (<Link href="/prestatarios" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>👤</span><span>Prestatarios</span></Link>)}
+            {isAdmin() && (<Link href="/distribuidores" onClick={() => setSidebarOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', color: '#9ca3af', borderRadius: '8px', marginBottom: '4px', textDecoration: 'none' }}><span style={{ fontSize: '18px' }}>🤝</span><span>Distribuidores</span></Link>)}
           </nav>
 
-          <div style={{ padding: '16px', borderTop: '1px solid #1f2937', backgroundColor: '#111827', flexShrink: 0 }}>
-            <button onClick={signOut} style={{ width: '100%', padding: 12, backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 14 }}>🚪 Cerrar Sesión</button>
+          <div style={{ padding: '20px', borderTop: '1px solid #1f2937' }}>
+            <button onClick={() => { signOut(); setSidebarOpen(false); }} style={{ width: '100%', padding: '12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><span>🚪</span><span>Cerrar Sesión</span></button>
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="main" style={{ marginLeft: '260px', flex: 1, padding: '24px' }}>
-          
-          {/* 🔴 BOTÓN HAMBURGUESA */}
-          <button 
-            className="mobile-menu-btn" 
-            onClick={() => setSidebarOpen(true)} 
-            style={{ 
-              display: 'none',
-              position: 'fixed', 
-              top: '70px', 
-              left: '16px', 
-              zIndex: 100, 
-              padding: '10px 14px', 
-              backgroundColor: '#2563eb', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '8px', 
-              cursor: 'pointer', 
-              fontSize: '20px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
-            }}
-          >
-            ☰
-          </button>
-          
-          <div className="header-content" style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <div style={{ marginBottom: 16 }}>
-              <h1 style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>Dashboard General</h1>
-              <p style={{ margin: '6px 0 0', opacity: 0.9 }}>Vista ejecutiva de tu negocio de préstamos</p>
+        {/* ✅ MAIN CONTENT */}
+        <main className="main-content" style={{ marginLeft: '280px', flex: 1, minHeight: '100vh', backgroundColor: '#0b0f19' }}>
+          <header style={{ backgroundColor: '#111827', borderBottom: '1px solid #1f2937', padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', position: 'sticky', top: 0, zIndex: 30 }}>
+            <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{ display: 'none', padding: '8px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px', marginRight: 'auto' }}>☰</button>
+            <NotificationsBell />
+          </header>
+
+          <div style={{ padding: '32px' }}>
+            {/* HEADER */}
+            <div style={{ marginBottom: '32px' }}>
+              <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: 'white', margin: '0 0 8px 0' }}>📊 Panel General</h1>
+              <p style={{ color: '#9ca3af', margin: 0 }}>Bienvenido de nuevo, {user?.full_name?.split(' ')[0] || 'Usuario'}</p>
             </div>
-            
-            {/* 🔔 Header con botones + campana de notificaciones */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
-              <button onClick={() => window.print()} className="no-print" style={{ flex: 1, padding: '12px 20px', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>🖨️ Imprimir</button>
-              <button onClick={exportarDashboard} className="no-print" style={{ flex: 1, padding: '12px 20px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📥 Exportar Excel</button>
+
+            {/* ✅ TARJETAS DE MÉTRICAS */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
               
-              {/* 🔔 Campana de notificaciones */}
-              <NotificationsBell />
+              {/* Saldo Caja */}
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>💰 Saldo en Caja</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#34d399' }}>${metrics.saldoCaja.toLocaleString('es-MX')}</div>
+              </div>
+
+              {/* Préstamos Activos */}
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>📄 Préstamos Activos</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#60a5fa' }}>{metrics.prestamosActivos}</div>
+              </div>
+
+              {/* Por Cobrar */}
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>📈 Por Cobrar (Activos)</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fbbf24' }}>${metrics.porCobrar.toLocaleString('es-MX')}</div>
+              </div>
+
+              {/* Vencidos */}
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
+                <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>⚠️ Préstamos Vencidos</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#f87171' }}>{metrics.vencidos}</div>
+              </div>
             </div>
-          </div>
 
-          {/* Stats Grid */}
-          <div className="grid-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 24 }}>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Saldo Actual</div><div style={{fontSize:28,fontWeight:'bold',color:'#34d399'}}>${(metrics?.capital?.saldoActual || 0).toLocaleString()}</div></div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Ingresos</div><div style={{fontSize:28,fontWeight:'bold',color:'#60a5fa'}}>${(metrics?.capital?.totalIngresos || 0).toLocaleString()}</div></div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Egresos</div><div style={{fontSize:28,fontWeight:'bold',color:'#ef4444'}}>${(metrics?.capital?.totalEgresos || 0).toLocaleString()}</div></div>
-            <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Distribuidores</div><div style={{fontSize:28,fontWeight:'bold',color:'#fbbf24'}}>{metrics?.distributors?.total || 0}</div></div>
-          </div>
+            {/* ✅ SEMÁFORO DE COBRANZA */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              
+              {/* Columna 1: Vencidos y Por Vencer */}
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
+                <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>🚨 Atención Inmediata</h2>
+                
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '14px', color: '#f87171', fontWeight: '600', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>🔴 Vencidos ({vencidos.length})</div>
+                  {vencidos.length === 0 ? <div style={{ color: '#6b7280', fontSize: '13px' }}>Todo al día 🎉</div> : (
+                    vencidos.map(p => (
+                      <div key={p.id} style={{ backgroundColor: '#0b0f19', padding: '12px', borderRadius: '8px', marginBottom: '8px', borderLeft: '3px solid #ef4444' }}>
+                        <div style={{ color: 'white', fontWeight: '600' }}>{p.prestatario?.nombre || 'Cliente'}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>Venció: {new Date(p.fecha_vencimiento).toLocaleDateString()}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
 
-          {/* Clientes */}
-          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600, color: '#34d399' }}>👥 Clientes</h2>
-            <div className="grid-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Total</div><div style={{fontSize:28,fontWeight:'bold',color:'#60a5fa'}}>{metrics?.clientes?.total || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Activos</div><div style={{fontSize:28,fontWeight:'bold',color:'#34d399'}}>{metrics?.clientes?.activos || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Morosos</div><div style={{fontSize:28,fontWeight:'bold',color:'#f87171'}}>{metrics?.clientes?.morosos || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Morosidad</div><div style={{fontSize:28,fontWeight:'bold',color:'#fbbf24'}}>{metrics?.clientes?.total > 0 ? ((metrics.clientes.morosos/metrics.clientes.total)*100).toFixed(1) : 0}%</div></div>
-            </div>
-          </div>
+                <div>
+                  <div style={{ fontSize: '14px', color: '#fbbf24', fontWeight: '600', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>🟡 Por Vencer (7 días)</div>
+                  {porVencer.length === 0 ? <div style={{ color: '#6b7280', fontSize: '13px' }}>Sin alertas próximas</div> : (
+                    porVencer.map(p => (
+                      <div key={p.id} style={{ backgroundColor: '#0b0f19', padding: '12px', borderRadius: '8px', marginBottom: '8px', borderLeft: '3px solid #f59e0b' }}>
+                        <div style={{ color: 'white', fontWeight: '600' }}>{p.prestatario?.nombre || 'Cliente'}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>Vence: {new Date(p.fecha_vencimiento).toLocaleDateString()}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
-          {/* Préstamos */}
-          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600, color: '#fbbf24' }}>📄 Préstamos</h2>
-            <div className="grid-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Total</div><div style={{fontSize:28,fontWeight:'bold',color:'#60a5fa'}}>{metrics?.prestamos?.total || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Activos</div><div style={{fontSize:28,fontWeight:'bold',color:'#34d399'}}>{metrics?.prestamos?.activos || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Prestado</div><div style={{fontSize:28,fontWeight:'bold',color:'#fbbf24'}}>${(metrics?.prestamos?.totalPrestado || 0).toLocaleString()}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Por Cobrar</div><div style={{fontSize:28,fontWeight:'bold',color:'#f87171'}}>${(metrics?.prestamos?.totalPorCobrar || 0).toLocaleString()}</div></div>
-            </div>
-          </div>
+              {/* Columna 2: Recientes */}
+              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', padding: '24px' }}>
+                <h2 style={{ margin: '0 0 24px', fontSize: '20px', fontWeight: '600', color: 'white' }}>🆕 Últimos Préstamos</h2>
+                {recientes.length === 0 ? <div style={{ color: '#6b7280', fontSize: '13px' }}>No hay registros aún</div> : (
+                  recientes.map(p => (
+                    <div key={p.id} style={{ backgroundColor: '#0b0f19', padding: '16px', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ color: 'white', fontWeight: '600' }}>{p.prestatario?.nombre || 'Cliente'}</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>{new Date(p.fecha_inicio).toLocaleDateString()}</div>
+                      </div>
+                      <div style={{ color: '#34d399', fontWeight: 'bold' }}>${Number(p.monto_principal).toLocaleString()}</div>
+                    </div>
+                  ))
+                )}
+                <Link href="/prestamos" style={{ display: 'block', textAlign: 'center', marginTop: '16px', color: '#60a5fa', textDecoration: 'none', fontSize: '14px', fontWeight: '600' }}>Ver todos los préstamos →</Link>
+              </div>
 
-          {/* Leads */}
-          <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-            <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600, color: '#a78bfa' }}>🎯 Leads</h2>
-            <div className="grid-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Total</div><div style={{fontSize:28,fontWeight:'bold',color:'#60a5fa'}}>{metrics?.leads?.total || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Nuevos</div><div style={{fontSize:28,fontWeight:'bold',color:'#fbbf24'}}>{metrics?.leads?.nuevos || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Convertidos</div><div style={{fontSize:28,fontWeight:'bold',color:'#34d399'}}>{metrics?.leads?.convertidos || 0}</div></div>
-              <div style={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}><div style={{color:'#9ca3af',fontSize:13,marginBottom:8}}>Monto Potencial</div><div style={{fontSize:28,fontWeight:'bold',color:'#f87171'}}>${(metrics?.leads?.montoPotencial || 0).toLocaleString()}</div></div>
             </div>
           </div>
         </main>
