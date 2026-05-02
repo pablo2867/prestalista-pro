@@ -3,15 +3,14 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Validar variables de entorno al inicio
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  console.error('❌ Faltan variables de entorno de Supabase')
-}
+// Verificar variables críticas
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const webhookUrl = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-)
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey)
+  : null
 
 type Prestatario = {
   id: string
@@ -28,7 +27,7 @@ type Prestatario = {
 export default function PrestatariosPage() {
   const [data, setData] = useState<Prestatario[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [configError, setConfigError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -36,13 +35,19 @@ export default function PrestatariosPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const [form, setForm] = useState({
-    nombre_completo: '', documento: '', telefono: '', email: '', direccion: '', estado: 'activo' as Prestatario['estado'], notas: ''
+    nombre_completo: '', documento: '', telefono: '', email: '', direccion: '', 
+    estado: 'activo' as Prestatario['estado'], notas: ''
   })
 
   useEffect(() => {
-    // Verificar variables críticas al montar
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      setError('Configuración incompleta: NEXT_PUBLIC_SUPABASE_URL no definida')
+    // Verificar configuración al montar
+    if (!supabaseUrl || !supabaseKey) {
+      setConfigError('⚙️ Variables de Supabase no configuradas en Vercel')
+      setLoading(false)
+      return
+    }
+    if (!supabase) {
+      setConfigError('⚙️ Error al inicializar Supabase')
       setLoading(false)
       return
     }
@@ -50,8 +55,9 @@ export default function PrestatariosPage() {
   }, [])
 
   const fetchPrestatarios = async () => {
+    if (!supabase) return
+    setLoading(true)
     try {
-      setLoading(true)
       const { data, error } = await supabase
         .from('prestatarios')
         .select('*')
@@ -59,13 +65,11 @@ export default function PrestatariosPage() {
       
       if (error) throw error
       setData(data || [])
-      setError(null)
     } catch (err: any) {
-      console.error('Error fetching:', err)
-      setError('No se pudieron cargar los datos: ' + err.message)
-    } finally {
-      setLoading(false)
+      console.error('Error:', err)
+      setConfigError('Error al cargar datos: ' + err.message)
     }
+    setLoading(false)
   }
 
   const showToast = (msg: string, type: 'success' | 'error') => {
@@ -74,10 +78,11 @@ export default function PrestatariosPage() {
   }
 
   const handleSave = async () => {
-    if (!form.nombre_completo.trim()) return showToast('El nombre es obligatorio', 'error')
+    if (!supabase) return showToast('Error de configuración', 'error')
+    if (!form.nombre_completo.trim()) return showToast('Nombre obligatorio', 'error')
     
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const {  { user } } = await supabase.auth.getUser()
     
     if (!user) {
       showToast('Debes estar autenticado', 'error')
@@ -85,11 +90,9 @@ export default function PrestatariosPage() {
       return
     }
 
-    const payload = { ...form, user_id: user.id }
-
     const { error } = editingId
-      ? await supabase.from('prestatarios').update(payload).eq('id', editingId)
-      : await supabase.from('prestatarios').insert([payload])
+      ? await supabase.from('prestatarios').update({ ...form, user_id: user.id }).eq('id', editingId)
+      : await supabase.from('prestatarios').insert([{ ...form, user_id: user.id }])
 
     if (error) {
       showToast('Error: ' + error.message, 'error')
@@ -102,9 +105,10 @@ export default function PrestatariosPage() {
   }
 
   const handleDelete = async (id: string) => {
+    if (!supabase) return
     if (!confirm('¿Desactivar?')) return
     const { error } = await supabase.from('prestatarios').update({ estado: 'inactivo' }).eq('id', id)
-    if (error) showToast('Error al eliminar', 'error')
+    if (error) showToast('Error', 'error')
     else { showToast('Desactivado', 'success'); fetchPrestatarios() }
   }
 
@@ -129,67 +133,77 @@ export default function PrestatariosPage() {
   }
 
   const syncToSheets = async () => {
-    const webhook = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL
-    if (!webhook) {
-      showToast('⚠️ Webhook no configurado en Vercel', 'error')
+    if (!webhookUrl) {
+      showToast('⚠️ Webhook no configurado', 'error')
       return
     }
+    if (!supabase) return
 
     setSyncing(true)
     showToast('📤 Sincronizando...', 'success')
 
     const payload = data.map(p => ({
-      ID: p.id,
-      Nombre: p.nombre_completo,
-      Documento: p.documento || '',
-      Telefono: p.telefono || '',
-      Email: p.email || '',
-      Direccion: p.direccion || '',
-      Estado: p.estado,
-      Notas: p.notas || '',
-      Creado: new Date(p.created_at).toLocaleString('es-MX')
+      ID: p.id, Nombre: p.nombre_completo, Documento: p.documento || '',
+      Telefono: p.telefono || '', Email: p.email || '', Direccion: p.direccion || '',
+      Estado: p.estado, Notas: p.notas || '', Creado: new Date(p.created_at).toLocaleString('es-MX')
     }))
 
     try {
-      const res = await fetch(webhook, {
+      const res = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheet: 'Prestatarios', payload })
       })
 
       if (res.ok) {
-        showToast('✅ Sincronizado con Sheets', 'success')
+        showToast('✅ Sincronizado', 'success')
       } else {
-        const text = await res.text()
-        console.error('Error Sheets:', res.status, text)
         showToast(`❌ Error: ${res.status}`, 'error')
       }
-    } catch (err: any) {
-      console.error('Error de conexión:', err)
+    } catch {
       showToast('❌ Error de conexión', 'error')
     }
     setSyncing(false)
   }
 
-  // Pantalla de error por configuración
-  if (error && !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  const filtered = data.filter(p => 
+    p.nombre_completo.toLowerCase().includes(search.toLowerCase()) ||
+    (p.documento && p.documento.toLowerCase().includes(search.toLowerCase()))
+  )
+
+  // PANTALLA DE ERROR DE CONFIGURACIÓN
+  if (configError) {
     return (
       <main className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="bg-white p-6 rounded-xl shadow-lg max-w-md text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-3">⚙️ Configuración pendiente</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <p className="text-sm text-gray-500">
-            Ve a Vercel → Settings → Environment Variables y agrega las variables de Supabase.
-          </p>
+        <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg text-center">
+          <div className="text-5xl mb-4">⚙️</div>
+          <h2 className="text-2xl font-bold text-red-600 mb-4">Error de Configuración</h2>
+          <p className="text-gray-700 mb-6 bg-gray-100 p-4 rounded-lg">{configError}</p>
+          
+          <div className="text-left text-sm text-gray-600 mb-6 space-y-2">
+            <p><strong>Solución:</strong></p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Ve a Vercel → Settings → Environment Variables</li>
+              <li>Agrega estas variables:</li>
+            </ol>
+            <ul className="list-disc list-inside ml-4 mt-2 text-xs font-mono bg-gray-100 p-3 rounded">
+              <li>NEXT_PUBLIC_SUPABASE_URL</li>
+              <li>NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
+              <li>NEXT_PUBLIC_GAS_WEBHOOK_URL</li>
+            </ul>
+            <p className="mt-3 text-xs">Después de agregarlas, haz Redeploy</p>
+          </div>
+          
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Recargar Página
+          </button>
         </div>
       </main>
     )
   }
-
-  const filtered = data.filter(p =>
-    p.nombre_completo.toLowerCase().includes(search.toLowerCase()) ||
-    (p.documento && p.documento.toLowerCase().includes(search.toLowerCase()))
-  )
 
   return (
     <main className="p-6 bg-gray-50 min-h-screen">
@@ -205,30 +219,22 @@ export default function PrestatariosPage() {
         <h1 className="text-2xl font-bold text-gray-800">Prestatarios</h1>
         <div className="flex gap-3 w-full sm:w-auto">
           <input
-            type="text" placeholder="Buscar por nombre o documento..."
+            type="text" placeholder="Buscar..."
             value={search} onChange={e => setSearch(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-64"
           />
-          <button onClick={() => { resetForm(); setModalOpen(true) }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">+ Nuevo</button>
-          <button onClick={syncToSheets} disabled={syncing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50">
+          <button onClick={() => { resetForm(); setModalOpen(true) }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Nuevo</button>
+          <button onClick={syncToSheets} disabled={syncing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
             {syncing ? '🔄...' : '🔄 Sheets'}
           </button>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          ⚠️ {error}
-        </div>
-      )}
-
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
         {loading ? (
           <div className="p-8 text-center text-gray-500">Cargando...</div>
-        ) : error ? (
-          <div className="p-8 text-center text-gray-500">No se pudieron cargar los datos</div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">No hay prestatarios registrados</div>
+          <div className="p-8 text-center text-gray-500">No hay prestatarios</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -244,7 +250,7 @@ export default function PrestatariosPage() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map(p => (
                   <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800">{p.nombre_completo}</td>
+                    <td className="px-4 py-3 font-medium">{p.nombre_completo}</td>
                     <td className="px-4 py-3 text-gray-600">{p.documento || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{p.telefono || p.email || '-'}</td>
                     <td className="px-4 py-3">
@@ -268,7 +274,7 @@ export default function PrestatariosPage() {
       {modalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold mb-4">{editingId ? 'Editar Prestatario' : 'Nuevo Prestatario'}</h2>
+            <h2 className="text-lg font-semibold mb-4">{editingId ? 'Editar' : 'Nuevo Prestatario'}</h2>
             <div className="space-y-3">
               <input placeholder="Nombre completo *" value={form.nombre_completo} onChange={e => setForm({...form, nombre_completo: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
               <input placeholder="Documento" value={form.documento} onChange={e => setForm({...form, documento: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
