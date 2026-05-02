@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
+// ✅ MISMA URL QUE CAPITAL Y PRÉSTAMOS (funciona 100%)
+const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwG1NOvxloQyn-g1widdBX0exHo0HE_2TpDC9tXUnzxDsM480tMVnce356tHZ-xkGeMDA/exec'
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const webhookUrl = process.env.NEXT_PUBLIC_GAS_WEBHOOK_URL
 
 const supabase = supabaseUrl && supabaseKey 
   ? createClient(supabaseUrl, supabaseKey)
@@ -79,7 +81,7 @@ export default function PrestatariosPage() {
     if (!form.nombre_completo.trim()) return showToast('Nombre obligatorio', 'error')
     
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const {  { user } } = await supabase.auth.getUser()
     
     if (!user) {
       showToast('Debes estar autenticado', 'error')
@@ -129,19 +131,10 @@ export default function PrestatariosPage() {
     setModalOpen(false)
   }
 
-  // 🚨 FUNCIÓN CON DEBUGGING VISUAL
+  // ✅ SINCRONIZACIÓN CON GOOGLE SHEETS (IGUAL QUE PRÉSTAMOS)
   const syncToSheets = async () => {
-    // 1. Alerta para confirmar que el botón funciona
-    alert("🔍 Iniciando proceso de sincronización...");
-
-    // 2. Verificar si tenemos la URL del webhook
-    if (!webhookUrl) {
-      alert(" ERROR: Falta la variable 'NEXT_PUBLIC_GAS_WEBHOOK_URL' en Vercel.");
-      return;
-    }
-
-    alert("✅ Variable detectada. Enviando datos...");
     setSyncing(true)
+    showToast('📤 Sincronizando...', 'success')
 
     const payload = data.map(p => ({
       ID: p.id, 
@@ -156,21 +149,21 @@ export default function PrestatariosPage() {
     }))
 
     try {
-      const res = await fetch(webhookUrl, {
+      await fetch(GOOGLE_SHEETS_WEBHOOK, {
         method: 'POST',
+        mode: 'no-cors',
+        keepalive: true,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheet: 'Prestatarios', payload })
+        body: JSON.stringify({
+          tipo: 'Prestatario',
+          datos: payload,
+          fecha: new Date().toISOString()
+        })
       })
-
-      const text = await res.text()
-      
-      if (res.ok) {
-        alert("✅ ¡ÉXITO! Los datos se enviaron a Google Sheets.\nRespuesta: " + text);
-      } else {
-        alert(" ERROR DE SHEETS:\nEstado: " + res.status + "\nDetalle: " + text);
-      }
+      showToast('✅ Sincronizado con Sheets', 'success')
     } catch (e: any) {
-      alert("❌ ERROR DE CONEXIÓN: " + e.message);
+      console.error('Error en sync:', e)
+      showToast('❌ Error de conexión', 'error')
     }
     setSyncing(false)
   }
@@ -186,7 +179,7 @@ export default function PrestatariosPage() {
     return (
       <main className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg text-center">
-          <div className="text-5xl mb-4">️</div>
+          <div className="text-5xl mb-4">⚙️</div>
           <h2 className="text-2xl font-bold text-red-600 mb-4">Error de Configuración</h2>
           <p className="text-gray-700 mb-6 bg-gray-100 p-4 rounded-lg">{configError}</p>
           <button onClick={() => window.location.reload()} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Recargar</button>
