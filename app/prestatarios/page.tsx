@@ -40,7 +40,7 @@ export default function PrestatariosPage() {
 
   useEffect(() => {
     if (!supabaseUrl || !supabaseKey) {
-      setConfigError('⚙️ Variables de Supabase no configuradas en Vercel')
+      setConfigError('⚙️ Variables de Supabase no configuradas')
       setLoading(false)
       return
     }
@@ -64,7 +64,6 @@ export default function PrestatariosPage() {
       if (error) throw error
       setData(data || [])
     } catch (err: any) {
-      console.error('Error:', err)
       setConfigError('Error al cargar datos: ' + err.message)
     }
     setLoading(false)
@@ -80,7 +79,6 @@ export default function PrestatariosPage() {
     if (!form.nombre_completo.trim()) return showToast('Nombre obligatorio', 'error')
     
     setLoading(true)
-    // ✅ CORRECCIÓN: destructuring correcto de Supabase auth
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
@@ -131,15 +129,19 @@ export default function PrestatariosPage() {
     setModalOpen(false)
   }
 
+  // 🚨 FUNCIÓN CON DEBUGGING VISUAL
   const syncToSheets = async () => {
-    if (!webhookUrl) {
-      showToast('⚠️ Webhook no configurado', 'error')
-      return
-    }
-    if (!supabase) return
+    // 1. Alerta para confirmar que el botón funciona
+    alert("🔍 Iniciando proceso de sincronización...");
 
+    // 2. Verificar si tenemos la URL del webhook
+    if (!webhookUrl) {
+      alert(" ERROR: Falta la variable 'NEXT_PUBLIC_GAS_WEBHOOK_URL' en Vercel.");
+      return;
+    }
+
+    alert("✅ Variable detectada. Enviando datos...");
     setSyncing(true)
-    showToast('📤 Sincronizando...', 'success')
 
     const payload = data.map(p => ({
       ID: p.id, 
@@ -160,13 +162,15 @@ export default function PrestatariosPage() {
         body: JSON.stringify({ sheet: 'Prestatarios', payload })
       })
 
+      const text = await res.text()
+      
       if (res.ok) {
-        showToast('✅ Sincronizado', 'success')
+        alert("✅ ¡ÉXITO! Los datos se enviaron a Google Sheets.\nRespuesta: " + text);
       } else {
-        showToast(`❌ Error: ${res.status}`, 'error')
+        alert(" ERROR DE SHEETS:\nEstado: " + res.status + "\nDetalle: " + text);
       }
-    } catch {
-      showToast('❌ Error de conexión', 'error')
+    } catch (e: any) {
+      alert("❌ ERROR DE CONEXIÓN: " + e.message);
     }
     setSyncing(false)
   }
@@ -182,7 +186,7 @@ export default function PrestatariosPage() {
     return (
       <main className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg text-center">
-          <div className="text-5xl mb-4">⚙️</div>
+          <div className="text-5xl mb-4">️</div>
           <h2 className="text-2xl font-bold text-red-600 mb-4">Error de Configuración</h2>
           <p className="text-gray-700 mb-6 bg-gray-100 p-4 rounded-lg">{configError}</p>
           <button onClick={() => window.location.reload()} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Recargar</button>
