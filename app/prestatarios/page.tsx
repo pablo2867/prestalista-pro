@@ -80,7 +80,8 @@ export default function PrestatariosPage() {
     if (!form.nombre_completo.trim()) return showToast('Nombre obligatorio', 'error')
     
     setLoading(true)
-    const {  { user } } = await supabase.auth.getUser()
+    // ✅ CORRECCIÓN: destructuring correcto de Supabase auth
+    const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       showToast('Debes estar autenticado', 'error')
@@ -170,7 +171,6 @@ export default function PrestatariosPage() {
     setSyncing(false)
   }
 
-  // 🔒 FILTRO BLINDADO CONTRA NULL/UNDEFINED
   const filtered = data.filter(p => {
     const nombre = String(p.nombre_completo ?? '').toLowerCase()
     const doc = String(p.documento ?? '').toLowerCase()
