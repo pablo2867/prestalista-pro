@@ -48,10 +48,17 @@ export default function PrestatariosPage() {
   const handleSave = async () => {
     if (!form.nombre_completo.trim()) return showToast('Nombre obligatorio', 'error')
     setLoading(true)
-    // ✅ SINTAXIS CORRECTA: "data: { user }"
-    const {  { user } } = await supabase.auth.getUser()
+    
+    // ✅ SINTAXIS EXPLÍCITA: Sin destructuración anidada problemática
+    const authResult = await supabase.auth.getUser()
+    const user = authResult.data?.user
+    
     if (!user) { showToast('Error de autenticación', 'error'); setLoading(false); return }
-    const { error } = editingId ? await supabase.from('prestatarios').update({ ...form, user_id: user.id }).eq('id', editingId) : await supabase.from('prestatarios').insert([{ ...form, user_id: user.id }])
+    
+    const { error } = editingId 
+      ? await supabase.from('prestatarios').update({ ...form, user_id: user.id }).eq('id', editingId) 
+      : await supabase.from('prestatarios').insert([{ ...form, user_id: user.id }])
+    
     if (error) { showToast('Error: ' + error.message, 'error') }
     else { showToast(editingId ? 'Actualizado' : 'Creado correctamente', 'success'); await fetchPrestatarios(); resetForm() }
     setLoading(false)
