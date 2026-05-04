@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// ✅ MISMA URL QUE CAPITAL Y PRÉSTAMOS (funciona 100%)
+// ✅ URL DEL WEBHOOK (Misma que funciona en Capital y Préstamos)
 const GOOGLE_SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwG1NOvxloQyn-g1widdBX0exHo0HE_2TpDC9tXUnzxDsM480tMVnce356tHZ-xkGeMDA/exec'
 
+// ✅ Inicialización segura de Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -81,8 +82,9 @@ export default function PrestatariosPage() {
     if (!form.nombre_completo.trim()) return showToast('Nombre obligatorio', 'error')
     
     setLoading(true)
-    // ✅ CORRECCIÓN: destructuring correcto de Supabase auth
-    const { data: { user } } = await supabase.auth.getUser()
+    
+    // ✅ CORRECCIÓN: Sintaxis correcta de destructuring para Supabase Auth
+    const {  { user } } = await supabase.auth.getUser()
     
     if (!user) {
       showToast('Debes estar autenticado', 'error')
@@ -132,7 +134,7 @@ export default function PrestatariosPage() {
     setModalOpen(false)
   }
 
-  // ✅ SINCRONIZACIÓN CON GOOGLE SHEETS (IGUAL QUE PRÉSTAMOS)
+  // ✅ Función de sincronización con Google Sheets (Patrón probado)
   const syncToSheets = async () => {
     setSyncing(true)
     showToast('📤 Sincronizando...', 'success')
@@ -169,6 +171,7 @@ export default function PrestatariosPage() {
     setSyncing(false)
   }
 
+  // ✅ Filtro blindado contra null/undefined
   const filtered = data.filter(p => {
     const nombre = String(p.nombre_completo ?? '').toLowerCase()
     const doc = String(p.documento ?? '').toLowerCase()
@@ -176,6 +179,7 @@ export default function PrestatariosPage() {
     return nombre.includes(term) || doc.includes(term)
   })
 
+  // ✅ Pantalla de error de configuración
   if (configError) {
     return (
       <main className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
@@ -191,16 +195,24 @@ export default function PrestatariosPage() {
 
   return (
     <main className="p-6 bg-gray-50 min-h-screen">
+      {/* Toast notifications */}
       {toast && (
         <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow-lg text-white text-sm z-50 ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
           {toast.msg}
         </div>
       )}
 
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Prestatarios</h1>
         <div className="flex gap-3 w-full sm:w-auto">
-          <input type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-64" />
+          <input 
+            type="text" 
+            placeholder="Buscar..." 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-full sm:w-64" 
+          />
           <button onClick={() => { resetForm(); setModalOpen(true) }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Nuevo</button>
           <button onClick={syncToSheets} disabled={syncing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
             {syncing ? '🔄...' : '🔄 Sheets'}
@@ -208,6 +220,7 @@ export default function PrestatariosPage() {
         </div>
       </div>
 
+      {/* Tabla de datos */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
         {loading ? (
           <div className="p-8 text-center text-gray-500">Cargando...</div>
@@ -249,6 +262,7 @@ export default function PrestatariosPage() {
         )}
       </div>
 
+      {/* Modal de formulario */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
