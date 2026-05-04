@@ -83,8 +83,8 @@ export default function PrestatariosPage() {
     
     setLoading(true)
     
-    // ✅ CORRECCIÓN: Sintaxis correcta de destructuring para Supabase Auth
-    const {  { user } } = await supabase.auth.getUser()
+    // ✅ CORRECCIÓN DEFINITIVA: Sintaxis correcta con "data:"
+    const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       showToast('Debes estar autenticado', 'error')
